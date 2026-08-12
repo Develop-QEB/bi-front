@@ -12,8 +12,8 @@ export type BaseDatos = 'CIMU' | 'Trade' | 'SAP';
 export interface FiltrosResumen {
   /** `null` = "Todas" */
   base: BaseDatos | null;
-  /** `null` = "Todos" */
-  cliente: string | null;
+  /** Asesor comercial (columna `U_Asesor`); `null` = "Todos" */
+  asesor: string | null;
   anio: number;
   /** 1–12; `null` = año completo */
   mes: number | null;

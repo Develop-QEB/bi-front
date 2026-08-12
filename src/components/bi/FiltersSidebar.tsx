@@ -10,10 +10,10 @@ const ANIOS = [2027, 2026, 2025];
 interface FiltersSidebarProps {
   filtros: FiltrosResumen;
   onChange: (filtros: FiltrosResumen) => void;
-  clientes: readonly string[];
+  asesores: readonly string[];
 }
 
-export function FiltersSidebar({ filtros, onChange, clientes }: FiltersSidebarProps) {
+export function FiltersSidebar({ filtros, onChange, asesores }: FiltersSidebarProps) {
   const set = <K extends keyof FiltrosResumen>(key: K, valor: FiltrosResumen[K]) =>
     onChange({ ...filtros, [key]: valor });
 
@@ -47,13 +47,13 @@ export function FiltersSidebar({ filtros, onChange, clientes }: FiltersSidebarPr
         />
       </Filtro>
 
-      <Filtro etiqueta="Cliente">
+      <Filtro etiqueta="Asesor">
         <Select
-          value={filtros.cliente ?? ''}
-          onChange={(e) => set('cliente', e.target.value || null)}
+          value={filtros.asesor ?? ''}
+          onChange={(e) => set('asesor', e.target.value || null)}
           options={[
             { value: '', label: 'Todos' },
-            ...clientes.map((c) => ({ value: c, label: c })),
+            ...asesores.map((a) => ({ value: a, label: a })),
           ]}
         />
       </Filtro>
