@@ -4,10 +4,13 @@ import type { FiltrosResumen, ResumenVentas } from '../types/bi';
  * Capa de datos del Resumen General de Ventas.
  *
  * Llama al backend (bi-back), que agrega desde la vista `V_APS_Globales` de QEB.
- * La URL base sale de `VITE_API_URL`; en local cae a http://localhost:3001.
+ * URL base: `VITE_API_URL` si está; si no, en dev usa el back local y en el build
+ * de producción (bi.qeb.mx) usa el back desplegado en Render.
  * El filtrado real (millones de renglones) es responsabilidad del back.
  */
-const API = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+const API =
+  import.meta.env.VITE_API_URL ??
+  (import.meta.env.DEV ? 'http://localhost:3001' : 'https://qeb-bi-back.onrender.com');
 
 function toQuery(filtros: FiltrosResumen): string {
   const p = new URLSearchParams();
