@@ -2,26 +2,43 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
+import type { MouseHandlerDataParam } from 'recharts';
 import { ChartCard, ChartLegend } from './ChartCard';
 import { ChartTooltip } from './ChartTooltip';
 import { makePctPillLabel } from './PctPillLabel';
 import { chartColors, chartInk } from '../../lib/chartTheme';
 import { cumplimiento, formatAxisMill, formatMill, formatPct } from '../../lib/format';
+import { opacidadBarra } from '../../lib/seleccion';
 import { useThemeStore } from '../../store/themeStore';
 import type { VentaVsPpto } from '../../types/bi';
 
-export function VentasVsPptoChart({ data, className }: { data: VentaVsPpto[]; className?: string }) {
+export function VentasVsPptoChart({
+  data,
+  className,
+  mesesSel = [],
+  onToggleMes,
+}: {
+  data: VentaVsPpto[];
+  className?: string;
+  mesesSel?: number[];
+  onToggleMes?: (mes: number) => void;
+}) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const colores = chartColors(isDark);
   const ink = chartInk(isDark);
 
   const pcts = data.map((d) => cumplimiento(d.aps, d.ppto));
+  const alClic = (estado: MouseHandlerDataParam) => {
+    const item = data.find((d) => d.etiqueta === estado.activeLabel);
+    if (item) onToggleMes?.(item.mes);
+  };
 
   return (
     <ChartCard
@@ -46,7 +63,13 @@ export function VentasVsPptoChart({ data, className }: { data: VentaVsPpto[]; cl
       }}
     >
       <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={data} margin={{ top: 24, right: 12, left: 4, bottom: 4 }} barGap={2}>
+        <BarChart
+          data={data}
+          margin={{ top: 24, right: 12, left: 4, bottom: 4 }}
+          barGap={2}
+          onClick={alClic}
+          style={onToggleMes ? { cursor: 'pointer' } : undefined}
+        >
           <CartesianGrid stroke={ink.grid} vertical={false} />
           <XAxis
             dataKey="etiqueta"
@@ -59,7 +82,7 @@ export function VentasVsPptoChart({ data, className }: { data: VentaVsPpto[]; cl
             tick={{ fill: ink.axis, fontSize: 11 }}
             tickLine={false}
             axisLine={false}
-            width={62}
+            width={88}
           />
           <Tooltip
             cursor={{ fill: ink.cursor }}
@@ -73,8 +96,15 @@ export function VentasVsPptoChart({ data, className }: { data: VentaVsPpto[]; cl
               />
             }
           />
-          <Bar dataKey="ppto" name="Total PPTO" fill={colores.referencia} radius={[4, 4, 0, 0]} maxBarSize={22} />
+          <Bar dataKey="ppto" name="Total PPTO" fill={colores.referencia} radius={[4, 4, 0, 0]} maxBarSize={22}>
+            {data.map((d) => (
+              <Cell key={`ppto-${d.mes}`} fill={colores.referencia} fillOpacity={opacidadBarra(mesesSel, d.mes)} />
+            ))}
+          </Bar>
           <Bar dataKey="aps" name="Monto Total APS" fill={colores.real} radius={[4, 4, 0, 0]} maxBarSize={22}>
+            {data.map((d) => (
+              <Cell key={`aps-${d.mes}`} fill={colores.real} fillOpacity={opacidadBarra(mesesSel, d.mes)} />
+            ))}
             <LabelList
               dataKey="aps"
               content={makePctPillLabel({

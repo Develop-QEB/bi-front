@@ -16,6 +16,7 @@ function toQuery(filtros: FiltrosResumen): string {
   const p = new URLSearchParams();
   if (filtros.base) p.set('base', filtros.base);
   if (filtros.asesor) p.set('asesor', filtros.asesor);
+  if (filtros.cliente) p.set('cliente', filtros.cliente);
   p.set('anio', String(filtros.anio));
   if (filtros.mes != null) p.set('mes', String(filtros.mes));
   return p.toString();
@@ -35,4 +36,9 @@ export function getResumenVentas(filtros: FiltrosResumen): Promise<ResumenVentas
 /** Lista de asesores (columna `U_Asesor`) para el filtro del sidebar. */
 export function getAsesores(): Promise<string[]> {
   return getJSON<string[]>('/asesores');
+}
+
+/** Lista de clientes (columna `U_Cliente`) para el filtro del sidebar. */
+export function getClientes(): Promise<string[]> {
+  return getJSON<string[]>('/clientes');
 }

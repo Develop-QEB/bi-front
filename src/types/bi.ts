@@ -14,6 +14,8 @@ export interface FiltrosResumen {
   base: BaseDatos | null;
   /** Asesor comercial (columna `U_Asesor`); `null` = "Todos" */
   asesor: string | null;
+  /** Cliente (columna `U_Cliente`); `null` = "Todos" */
+  cliente: string | null;
   anio: number;
   /** 1–12; `null` = año completo */
   mes: number | null;
@@ -45,6 +47,8 @@ export interface VentaSemana {
 export interface VentaCatorcena {
   /** 1–26 */
   catorcena: number;
+  /** Mes (1–12) al que pertenece la catorcena. Enlaza catorcena ↔ mes. */
+  mes: number;
   /** "CATORCENA 01" */
   etiqueta: string;
   /** Venta real del año en curso */

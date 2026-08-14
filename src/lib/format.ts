@@ -1,30 +1,25 @@
 /**
- * Formateo de cifras del BI. El Power BI original muestra todo en millones
- * ("168 mill.", "$19.3 mill.") — replicamos esa convención.
+ * Formateo de cifras del BI. Se muestran las cantidades COMPLETAS en pesos con
+ * separadores de miles ("$20,940,000"), no abreviadas a millones.
  */
 
-/** 168_400_000 → "168 mill." */
-export function formatMill(value: number, decimals = 0): string {
-  const mill = value / 1_000_000;
-  return `${mill.toLocaleString('es-MX', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  })} mill.`;
+/** 20_940_000 → "$20,940,000" (cantidad completa con símbolo). */
+export function formatMill(value: number): string {
+  return formatCurrency(value);
 }
 
-/** 19_300_000 → "$19.3 mill." */
-export function formatMillCurrency(value: number, decimals = 1): string {
-  const mill = value / 1_000_000;
-  return `$${mill.toLocaleString('es-MX', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  })} mill.`;
+/** 20_940_000 → "$20,940,000" (idéntico a formatMill; se mantiene por compatibilidad). */
+export function formatMillCurrency(value: number): string {
+  return formatCurrency(value);
 }
 
-/** Etiqueta corta para ejes: 50_000_000 → "50 mill." */
+/**
+ * Etiqueta para ejes: número completo con separadores, SIN símbolo, para no
+ * ensanchar de más el eje. 50_000_000 → "50,000,000".
+ */
 export function formatAxisMill(value: number): string {
   if (value === 0) return '0';
-  return formatMill(value);
+  return value.toLocaleString('es-MX', { maximumFractionDigits: 0 });
 }
 
 export function formatPct(value: number, decimals = 2): string {

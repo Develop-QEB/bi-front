@@ -46,7 +46,7 @@ export function VentasPorSemanaChart({
         <BarChart
           layout="vertical"
           data={ordenado}
-          margin={{ top: 8, right: 56, left: 8, bottom: 4 }}
+          margin={{ top: 8, right: 104, left: 8, bottom: 4 }}
         >
           <CartesianGrid stroke={ink.grid} horizontal={false} />
           <XAxis

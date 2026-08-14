@@ -11,9 +11,24 @@ interface FiltersSidebarProps {
   filtros: FiltrosResumen;
   onChange: (filtros: FiltrosResumen) => void;
   asesores: readonly string[];
+  clientes: readonly string[];
+  /** Meses seleccionados (1–12). Vacío = todo el año. */
+  mesesSel: number[];
+  /** Alterna un mes en la selección. */
+  onToggleMes: (mes: number) => void;
+  /** Limpia la selección (vuelve a año completo). */
+  onClearMeses: () => void;
 }
 
-export function FiltersSidebar({ filtros, onChange, asesores }: FiltersSidebarProps) {
+export function FiltersSidebar({
+  filtros,
+  onChange,
+  asesores,
+  clientes,
+  mesesSel,
+  onToggleMes,
+  onClearMeses,
+}: FiltersSidebarProps) {
   const set = <K extends keyof FiltrosResumen>(key: K, valor: FiltrosResumen[K]) =>
     onChange({ ...filtros, [key]: valor });
 
@@ -58,6 +73,17 @@ export function FiltersSidebar({ filtros, onChange, asesores }: FiltersSidebarPr
         />
       </Filtro>
 
+      <Filtro etiqueta="Cliente">
+        <Select
+          value={filtros.cliente ?? ''}
+          onChange={(e) => set('cliente', e.target.value || null)}
+          options={[
+            { value: '', label: 'Todos' },
+            ...clientes.map((c) => ({ value: c, label: c })),
+          ]}
+        />
+      </Filtro>
+
       <Filtro etiqueta="Año">
         <div className="grid grid-cols-3 gap-2">
           {ANIOS.map((anio) => (
@@ -76,24 +102,30 @@ export function FiltersSidebar({ filtros, onChange, asesores }: FiltersSidebarPr
         <div className="grid grid-cols-3 gap-2">
           {MESES.map((mes, i) => {
             const numero = i + 1;
-            const activo = filtros.mes === numero;
             return (
               <BotonFiltro
                 key={mes}
-                activo={activo}
-                // Volver a picar el mes activo lo deselecciona → año completo.
-                onClick={() => set('mes', activo ? null : numero)}
+                activo={mesesSel.includes(numero)}
+                // Multi-selección: cada clic agrega o quita el mes (se suman).
+                onClick={() => onToggleMes(numero)}
               >
                 {mes}
               </BotonFiltro>
             );
           })}
         </div>
-        {filtros.mes !== null && (
+        <p className="mt-2 text-[11px] leading-snug text-zinc-400 dark:text-zinc-500">
+          {mesesSel.length === 0
+            ? 'Todo el año. Elige uno o varios meses para sumarlos.'
+            : `${mesesSel.length} mes${mesesSel.length > 1 ? 'es' : ''} seleccionado${
+                mesesSel.length > 1 ? 's' : ''
+              } (se suman).`}
+        </p>
+        {mesesSel.length > 0 && (
           <button
             type="button"
-            onClick={() => set('mes', null)}
-            className="mt-2 text-xs text-purple-600 underline-offset-2 hover:underline dark:text-purple-300"
+            onClick={onClearMeses}
+            className="mt-1 text-xs text-purple-600 underline-offset-2 hover:underline dark:text-purple-300"
           >
             Ver año completo
           </button>

@@ -2,26 +2,33 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
+import type { MouseHandlerDataParam } from 'recharts';
 import { ChartCard, ChartLegend } from './ChartCard';
 import { ChartTooltip } from './ChartTooltip';
 import { makePctPillLabel } from './PctPillLabel';
 import { chartColors, chartInk } from '../../lib/chartTheme';
 import { cumplimiento, formatAxisMill, formatMill, formatPct } from '../../lib/format';
+import { opacidadBarra } from '../../lib/seleccion';
 import { useThemeStore } from '../../store/themeStore';
 import type { VentaMensualComparada } from '../../types/bi';
 
 export function VentasMensualesChart({
   data,
   className,
+  mesesSel = [],
+  onToggleMes,
 }: {
   data: VentaMensualComparada[];
   className?: string;
+  mesesSel?: number[];
+  onToggleMes?: (mes: number) => void;
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const colores = chartColors(isDark);
@@ -29,6 +36,10 @@ export function VentasMensualesChart({
 
   const pcts = data.map((d) => cumplimiento(d.aps, d.anioAnterior));
   const topes = data.map((d) => Math.max(d.aps, d.anioAnterior));
+  const alClic = (estado: MouseHandlerDataParam) => {
+    const item = data.find((d) => d.etiqueta === estado.activeLabel);
+    if (item) onToggleMes?.(item.mes);
+  };
 
   return (
     <ChartCard
@@ -53,7 +64,13 @@ export function VentasMensualesChart({
       }}
     >
       <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={data} margin={{ top: 24, right: 12, left: 4, bottom: 4 }} barGap={2}>
+        <BarChart
+          data={data}
+          margin={{ top: 24, right: 12, left: 4, bottom: 4 }}
+          barGap={2}
+          onClick={alClic}
+          style={onToggleMes ? { cursor: 'pointer' } : undefined}
+        >
           <CartesianGrid stroke={ink.grid} vertical={false} />
           <XAxis
             dataKey="etiqueta"
@@ -66,7 +83,7 @@ export function VentasMensualesChart({
             tick={{ fill: ink.axis, fontSize: 11 }}
             tickLine={false}
             axisLine={false}
-            width={62}
+            width={88}
           />
           <Tooltip
             cursor={{ fill: ink.cursor }}
@@ -86,7 +103,11 @@ export function VentasMensualesChart({
             fill={colores.referencia}
             radius={[4, 4, 0, 0]}
             maxBarSize={22}
-          />
+          >
+            {data.map((d) => (
+              <Cell key={`ant-${d.mes}`} fill={colores.referencia} fillOpacity={opacidadBarra(mesesSel, d.mes)} />
+            ))}
+          </Bar>
           <Bar
             dataKey="aps"
             name="Monto Total APS"
@@ -94,6 +115,9 @@ export function VentasMensualesChart({
             radius={[4, 4, 0, 0]}
             maxBarSize={22}
           >
+            {data.map((d) => (
+              <Cell key={`aps-${d.mes}`} fill={colores.real} fillOpacity={opacidadBarra(mesesSel, d.mes)} />
+            ))}
             <LabelList
               dataKey="aps"
               content={makePctPillLabel({ pcts, isDark, topes, barrasPorGrupo: 2 })}
