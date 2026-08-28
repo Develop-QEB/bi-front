@@ -1,5 +1,5 @@
 import { API_URL, WS_URL } from '../lib/api';
-import type { EventoHistorial, FiltrosHistorial, ResumenHistorial } from '../types/historial';
+import type { ContextoHistorial, EventoHistorial, FiltrosHistorial, ResumenHistorial } from '../types/historial';
 
 function qs(f: Partial<FiltrosHistorial>): string {
   const p = new URLSearchParams();
@@ -25,6 +25,11 @@ export function getEventos(f: Partial<FiltrosHistorial>): Promise<EventoHistoria
 
 export function getResumenHistorial(f: Partial<FiltrosHistorial> = {}): Promise<ResumenHistorial> {
   return getJSON<ResumenHistorial>(`/historial/resumen?${qs(f)}`);
+}
+
+/** Detalle + línea de tiempo de una propuesta/campaña por su ref_id. */
+export function getContexto(refId: number): Promise<ContextoHistorial> {
+  return getJSON<ContextoHistorial>(`/historial/contexto?refId=${refId}`);
 }
 
 export type EstadoWS = 'conectado' | 'desconectado';
