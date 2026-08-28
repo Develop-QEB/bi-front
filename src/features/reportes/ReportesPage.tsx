@@ -42,6 +42,7 @@ function ObjetivosView() {
   const [error, setError] = useState(false);
   const objetivos = useObjetivosStore((s) => s.objetivos);
   const setObjetivo = useObjetivosStore((s) => s.setObjetivo);
+  const limpiarAnio = useObjetivosStore((s) => s.limpiarAnio);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const ink = chartInk(isDark);
 
@@ -92,13 +93,23 @@ function ObjetivosView() {
       </div>
 
       <div className={CARD}>
-        <h3 className="mb-3 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">Captura de metas (se guardan en tu navegador)</h3>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h3 className="text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">
+            Captura de metas en millones de pesos (MDP) — se guardan en tu navegador
+          </h3>
+          <button
+            onClick={() => limpiarAnio(anio)}
+            className="shrink-0 rounded-md bg-purple-500/10 px-2 py-1 text-xs text-purple-700 hover:bg-purple-500/20 dark:text-purple-300"
+          >
+            Limpiar
+          </button>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs text-zinc-400">
                 <th className="py-1 pr-2">Mes</th>
-                <th className="py-1 pr-2">Objetivo</th>
+                <th className="py-1 pr-2">Objetivo (MDP)</th>
                 <th className="py-1 pr-2">Real</th>
                 <th className="py-1 pr-2">Brecha</th>
                 <th className="py-1">Cumpl.</th>
@@ -109,13 +120,18 @@ function ObjetivosView() {
                 <tr key={f.mes} className="border-t border-purple-100/40 dark:border-purple-900/20">
                   <td className="py-1.5 pr-2 font-medium text-zinc-600 dark:text-zinc-300">{f.etiqueta}</td>
                   <td className="py-1.5 pr-2">
-                    <input
-                      type="number"
-                      value={f.objetivo || ''}
-                      onChange={(e) => setObjetivo(anio, f.mes, Number(e.target.value) || 0)}
-                      placeholder="0"
-                      className="w-28 rounded-md border border-purple-200/60 bg-white/70 px-2 py-0.5 text-right tabular-nums outline-none focus:border-purple-400 dark:border-purple-900/40 dark:bg-[#1a1025]/70 dark:text-zinc-200"
-                    />
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        value={f.objetivo ? f.objetivo / 1e6 : ''}
+                        onChange={(e) => setObjetivo(anio, f.mes, Math.max(0, Number(e.target.value) || 0) * 1e6)}
+                        placeholder="0"
+                        className="w-24 rounded-md border border-purple-200/60 bg-white/70 px-2 py-0.5 text-right tabular-nums outline-none focus:border-purple-400 dark:border-purple-900/40 dark:bg-[#1a1025]/70 dark:text-zinc-200"
+                      />
+                      <span className="text-[11px] text-zinc-400">MDP</span>
+                    </div>
                   </td>
                   <td className="py-1.5 pr-2 tabular-nums text-zinc-700 dark:text-zinc-200">{formatCurrency(f.real)}</td>
                   <td className={cn('py-1.5 pr-2 tabular-nums', f.brecha >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
