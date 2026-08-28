@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Filter, Target, TrendingUp } from 'lucide-react';
+import { Filter, PieChart, Target, TrendingUp } from 'lucide-react';
 import { Spinner } from '../../components/ui/spinner';
 import { cn } from '../../lib/utils';
 import { formatCurrency } from '../../lib/format';
@@ -8,11 +8,11 @@ import { chartInk } from '../../lib/chartTheme';
 import { useThemeStore } from '../../store/themeStore';
 import { getResumenVentas } from '../../services/resumenVentas.service';
 import { getResumenHistorial } from '../../services/historial.service';
-import { getEmbudo } from '../../services/reportes.service';
+import { getDistribucion, getEmbudo } from '../../services/reportes.service';
 import { objetivoDe, useObjetivosStore } from '../../store/objetivosStore';
 import type { ResumenVentas } from '../../types/bi';
 import type { ResumenHistorial } from '../../types/historial';
-import type { Embudo } from '../../types/reportes';
+import type { ConteoMonto, Dimension, Embudo } from '../../types/reportes';
 
 const CARD = cn(
   'rounded-2xl border p-4 backdrop-blur-xl shadow-xl',
@@ -262,13 +262,93 @@ function VariacionesView() {
   );
 }
 
+// ============ DISTRIBUCIÓN ============
+const DIMS: { k: Dimension; label: string }[] = [
+  { k: 'plaza', label: 'Plaza' },
+  { k: 'digital', label: 'Digital / Tradicional' },
+  { k: 'asesor', label: 'Asesor' },
+  { k: 'cliente', label: 'Cliente' },
+  { k: 'mueble', label: 'Tipo de mueble' },
+  { k: 'categoria', label: 'Categoría' },
+];
+
+function DistribucionView() {
+  const [dim, setDim] = useState<Dimension>('plaza');
+  const [metric, setMetric] = useState<'monto' | 'caras'>('monto');
+  const [data, setData] = useState<ConteoMonto[] | null>(null);
+  const [error, setError] = useState(false);
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const ink = chartInk(isDark);
+
+  useEffect(() => {
+    setData(null);
+    setError(false);
+    getDistribucion(dim).then(setData).catch(() => setError(true));
+  }, [dim]);
+
+  const top = (data ?? []).slice(0, 12).map((d) => ({ ...d, valor: d[metric], corto: d.nombre.length > 26 ? d.nombre.slice(0, 25) + '…' : d.nombre }));
+  const total = (data ?? []).reduce((a, d) => a + d[metric], 0);
+  const fmt = (v: number) => (metric === 'monto' ? formatCurrency(v) : `${nf(v)} caras`);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {DIMS.map((d) => (
+          <button key={d.k} onClick={() => setDim(d.k)} className={cn('rounded-full px-3 py-1 text-xs font-medium transition-colors', dim === d.k ? 'bg-gradient-to-br from-purple-500 to-fuchsia-500 text-white shadow' : 'bg-purple-500/10 text-purple-700 hover:bg-purple-500/20 dark:text-purple-200')}>
+            {d.label}
+          </button>
+        ))}
+        <div className="ml-auto flex gap-1 rounded-full bg-purple-500/10 p-0.5">
+          {(['monto', 'caras'] as const).map((m) => (
+            <button key={m} onClick={() => setMetric(m)} className={cn('rounded-full px-3 py-0.5 text-xs font-medium', metric === m ? 'bg-white text-purple-700 shadow dark:bg-[#241633] dark:text-purple-200' : 'text-zinc-500')}>
+              {m === 'monto' ? 'Monto' : 'Caras'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {error ? (
+        <p className="text-sm text-rose-500">No se pudo cargar.</p>
+      ) : !data ? (
+        <div className="flex h-48 items-center justify-center"><Spinner size="lg" /></div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+            <StatCard titulo={`Total ${metric === 'monto' ? '($)' : '(caras)'}`} valor={fmt(total)} sub={`en ${data.length} ${DIMS.find((d) => d.k === dim)?.label.toLowerCase()}`} />
+            <StatCard titulo="Líder" valor={top[0]?.nombre ?? '—'} tono="up" sub={top[0] ? fmt(top[0].valor) : ''} />
+            <StatCard titulo="Concentración top 3" valor={total ? `${Math.round((top.slice(0, 3).reduce((a, d) => a + d.valor, 0) / total) * 100)}%` : '—'} sub="del total" />
+          </div>
+
+          <div className={CARD}>
+            <h3 className="mb-2 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">
+              {metric === 'monto' ? 'Monto' : 'Caras'} por {DIMS.find((d) => d.k === dim)?.label} (top 12)
+            </h3>
+            <ResponsiveContainer width="100%" height={Math.max(240, top.length * 32)}>
+              <BarChart data={top} layout="vertical" margin={{ top: 4, right: metric === 'monto' ? 70 : 50, left: 8, bottom: 4 }}>
+                <CartesianGrid stroke={ink.grid} horizontal={false} />
+                <XAxis type="number" tickFormatter={(v) => (metric === 'monto' ? fmtM(Number(v)) : nf(Number(v)))} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
+                <YAxis type="category" dataKey="corto" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={150} />
+                <Tooltip cursor={{ fill: ink.cursor }} formatter={(v: unknown) => fmt(Number(v))} contentStyle={{ borderRadius: 12, border: 'none', background: isDark ? '#241633' : '#fff', fontSize: 12 }} />
+                <Bar dataKey="valor" fill="#8b5cf6" radius={[0, 4, 4, 0]} maxBarSize={20}>
+                  <LabelList dataKey="valor" position="right" formatter={(v: unknown) => (metric === 'monto' ? fmtM(Number(v)) : nf(Number(v)))} fill={ink.label} fontSize={10} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ============ página ============
-type Sub = 'objetivos' | 'embudo' | 'variaciones';
+type Sub = 'objetivos' | 'embudo' | 'variaciones' | 'distribucion';
 
 export function ReportesPage() {
   const [sub, setSub] = useState<Sub>('objetivos');
   const tabs: { k: Sub; label: string; Icon: typeof Target }[] = [
     { k: 'objetivos', label: 'Objetivos', Icon: Target },
+    { k: 'distribucion', label: 'Distribución', Icon: PieChart },
     { k: 'embudo', label: 'Embudo', Icon: Filter },
     { k: 'variaciones', label: 'Variaciones e impacto', Icon: TrendingUp },
   ];
@@ -296,6 +376,7 @@ export function ReportesPage() {
       </div>
 
       {sub === 'objetivos' && <ObjetivosView />}
+      {sub === 'distribucion' && <DistribucionView />}
       {sub === 'embudo' && <EmbudoView />}
       {sub === 'variaciones' && <VariacionesView />}
     </div>
