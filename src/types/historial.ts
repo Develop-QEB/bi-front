@@ -81,4 +81,12 @@ export interface ResumenHistorial {
   topUsuarios: ConteoNombre[];
   topQuitadores: ConteoNombre[];
   topCampanias: ConteoNombre[];
+  variacionPorUsuario: VariacionUsuario[];
+}
+
+export interface VariacionUsuario {
+  nombre: string;
+  alzas: number;
+  bajas: number;
+  neto: number;
 }
