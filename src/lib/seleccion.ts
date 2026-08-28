@@ -18,19 +18,19 @@ import type { Kpi, ResumenVentas } from '../types/bi';
 const suma = (nums: number[]) => nums.reduce((a, b) => a + b, 0);
 
 /**
- * Recalcula los cuatro KPIs para los meses seleccionados. Si no hay selección,
- * devuelve los KPIs del back tal cual (todo el año). Los "Acum" suman los meses
- * elegidos; los "Mensual" son el promedio por mes elegido (con un mes = ese mes).
- * El sparkline (`tendencia`) se conserva del KPI original: es decorativo.
+ * Recalcula los cuatro KPIs a partir de `datos` (cuyo `ventasVsPpto.ppto` ya trae
+ * los objetivos editados). Si hay meses seleccionados, usa solo esos; si no, usa
+ * todo el año. Los "Acum" suman; los "Mensual" son el promedio por mes (un mes =
+ * ese mes). El % de cumplimiento sale de valor/objetivo en cada KpiCard, así que
+ * al editar un objetivo el % cambia solo. `tendencia` (sparkline) se conserva.
  */
 export function kpisDeSeleccion(datos: ResumenVentas, mesesSel: number[]): Kpi[] {
-  if (!mesesSel.length) return datos.kpis;
-
-  const sel = new Set(mesesSel);
+  const meses = mesesSel.length ? mesesSel : datos.ventasMensuales.map((m) => m.mes);
+  const sel = new Set(meses);
   const apsSel = suma(datos.ventasMensuales.filter((m) => sel.has(m.mes)).map((m) => m.aps));
   const antSel = suma(datos.ventasMensuales.filter((m) => sel.has(m.mes)).map((m) => m.anioAnterior));
   const pptoSel = suma(datos.ventasVsPpto.filter((m) => sel.has(m.mes)).map((m) => m.ppto));
-  const n = mesesSel.length;
+  const n = meses.length || 1;
 
   const con = (id: string, valor: number, objetivo: number): Kpi => {
     const base = datos.kpis.find((k) => k.id === id);

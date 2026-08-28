@@ -10,7 +10,7 @@ import type { FiltrosResumen, ResumenVentas } from '../types/bi';
  */
 const API =
   import.meta.env.VITE_API_URL ??
-  (import.meta.env.DEV ? 'http://localhost:3001' : 'https://qeb-bi-back.onrender.com');
+  (import.meta.env.DEV ? 'http://localhost:3001' : 'https://bi-back-96j5.onrender.com');
 
 function toQuery(filtros: FiltrosResumen): string {
   const p = new URLSearchParams();
