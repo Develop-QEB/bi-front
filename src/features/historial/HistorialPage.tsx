@@ -28,6 +28,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { Spinner } from '../../components/ui/spinner';
+import { TooltipChart } from '../../components/charts/TooltipChart';
 import { cn } from '../../lib/utils';
 import { formatCurrency } from '../../lib/format';
 import { chartInk } from '../../lib/chartTheme';
@@ -190,11 +191,9 @@ function ActividadChart({ resumen }: { resumen: ResumenHistorial }) {
           <YAxis tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={32} />
           <Tooltip
             cursor={{ fill: ink.cursor }}
-            contentStyle={{ borderRadius: 12, border: 'none', background: isDark ? '#241633' : '#fff', color: isDark ? '#e4e4e7' : '#3f3f46', fontSize: 12 }}
-            formatter={(v: unknown, _n, p: any) => [`${v} acciones · +${p?.payload?.carasAgregadas ?? 0} / -${p?.payload?.carasQuitadas ?? 0} caras`, p?.payload?.fecha]}
-            labelFormatter={() => ''}
+            content={<TooltipChart format={(v, _n, p) => `${v} acciones · +${Number(p.carasAgregadas) || 0} / -${Number(p.carasQuitadas) || 0} caras`} />}
           />
-          <Bar dataKey="eventos" radius={[4, 4, 0, 0]} maxBarSize={26}>
+          <Bar dataKey="eventos" name="Acciones" radius={[4, 4, 0, 0]} maxBarSize={26}>
             {data.map((d) => (
               <Cell key={d.fecha} fill={d.neto >= 0 ? '#10b981' : '#8b5cf6'} />
             ))}

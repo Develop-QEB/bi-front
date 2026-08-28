@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Filter, PieChart, Target, TrendingUp } from 'lucide-react';
 import { Spinner } from '../../components/ui/spinner';
+import { TooltipChart } from '../../components/charts/TooltipChart';
 import { cn } from '../../lib/utils';
 import { formatCurrency } from '../../lib/format';
 import { chartInk } from '../../lib/chartTheme';
@@ -83,7 +84,7 @@ function ObjetivosView() {
             <CartesianGrid stroke={ink.grid} vertical={false} />
             <XAxis dataKey="etiqueta" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
             <YAxis tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={40} />
-            <Tooltip cursor={{ fill: ink.cursor }} formatter={(v: unknown) => formatCurrency(Number(v))} contentStyle={{ borderRadius: 12, border: 'none', background: isDark ? '#241633' : '#fff', fontSize: 12 }} />
+            <Tooltip cursor={{ fill: ink.cursor }} content={<TooltipChart format={(v) => formatCurrency(v)} />} />
             <Bar dataKey="objetivo" name="Objetivo" fill="#8b5cf6" opacity={0.35} radius={[4, 4, 0, 0]} maxBarSize={18} />
             <Bar dataKey="real" name="Real" fill="#8b5cf6" radius={[4, 4, 0, 0]} maxBarSize={18} />
           </BarChart>
@@ -213,7 +214,6 @@ function VariacionesView() {
   if (error) return <p className="text-sm text-rose-500">No se pudo cargar variaciones.</p>;
   if (!r) return <div className="flex h-48 items-center justify-center"><Spinner size="lg" /></div>;
 
-  const totAlzas = r.variacionPorUsuario.reduce((a, v) => a + v.alzas, 0);
   const varData = [...r.variacionPorUsuario].sort((a, b) => a.neto - b.neto).map((v) => ({ ...v, corto: v.nombre.split(' ').slice(0, 2).join(' ') }));
   const dia = r.porDia.map((d) => ({ etiqueta: d.fecha.slice(5), agregadas: d.carasAgregadas, quitadas: -d.carasQuitadas }));
 
@@ -233,7 +233,7 @@ function VariacionesView() {
             <CartesianGrid stroke={ink.grid} horizontal={false} />
             <XAxis type="number" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
             <YAxis type="category" dataKey="corto" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={110} />
-            <Tooltip cursor={{ fill: ink.cursor }} formatter={(v: unknown) => `${nf(Number(v))} caras`} contentStyle={{ borderRadius: 12, border: 'none', background: isDark ? '#241633' : '#fff', fontSize: 12 }} />
+            <Tooltip cursor={{ fill: ink.cursor }} content={<TooltipChart format={(v) => `${nf(v)} caras`} />} />
             <Bar dataKey="neto" radius={[0, 4, 4, 0]} maxBarSize={20}>
               {varData.map((v) => (
                 <Cell key={v.nombre} fill={v.neto >= 0 ? '#10b981' : '#f43f5e'} />
@@ -242,7 +242,7 @@ function VariacionesView() {
             </Bar>
           </BarChart>
         </ResponsiveContainer>
-        <p className="mt-1 text-center text-[11px] text-zinc-400">Verde = aprobó caras (DG/DCM) · Rojo = quitó reservas (tráfico). {totAlzas === 0 ? '' : ''}</p>
+        <p className="mt-1 text-center text-[11px] text-zinc-400">Verde = aprobó caras (DG/DCM) · Rojo = quitó reservas (tráfico)</p>
       </div>
 
       <div className={CARD}>
@@ -252,7 +252,7 @@ function VariacionesView() {
             <CartesianGrid stroke={ink.grid} vertical={false} />
             <XAxis dataKey="etiqueta" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={16} />
             <YAxis tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={44} tickFormatter={(v) => nf(Number(v))} />
-            <Tooltip cursor={{ fill: ink.cursor }} formatter={(v: unknown) => `${nf(Math.abs(Number(v)))} caras`} contentStyle={{ borderRadius: 12, border: 'none', background: isDark ? '#241633' : '#fff', fontSize: 12 }} />
+            <Tooltip cursor={{ fill: ink.cursor }} content={<TooltipChart format={(v) => `${nf(Math.abs(v))} caras`} />} />
             <Bar dataKey="agregadas" name="Alzas" stackId="s" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={22} />
             <Bar dataKey="quitadas" name="Bajas" stackId="s" fill="#f43f5e" radius={[0, 0, 3, 3]} maxBarSize={22} />
           </BarChart>
@@ -268,6 +268,8 @@ const DIMS: { k: Dimension; label: string }[] = [
   { k: 'digital', label: 'Digital / Tradicional' },
   { k: 'asesor', label: 'Asesor' },
   { k: 'cliente', label: 'Cliente' },
+  { k: 'marca', label: 'Marca' },
+  { k: 'producto', label: 'Producto' },
   { k: 'mueble', label: 'Tipo de mueble' },
   { k: 'categoria', label: 'Categoría' },
 ];
@@ -328,7 +330,7 @@ function DistribucionView() {
                 <CartesianGrid stroke={ink.grid} horizontal={false} />
                 <XAxis type="number" tickFormatter={(v) => (metric === 'monto' ? fmtM(Number(v)) : nf(Number(v)))} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
                 <YAxis type="category" dataKey="corto" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={150} />
-                <Tooltip cursor={{ fill: ink.cursor }} formatter={(v: unknown) => fmt(Number(v))} contentStyle={{ borderRadius: 12, border: 'none', background: isDark ? '#241633' : '#fff', fontSize: 12 }} />
+                <Tooltip cursor={{ fill: ink.cursor }} content={<TooltipChart format={(v) => fmt(v)} />} />
                 <Bar dataKey="valor" fill="#8b5cf6" radius={[0, 4, 4, 0]} maxBarSize={20}>
                   <LabelList dataKey="valor" position="right" formatter={(v: unknown) => (metric === 'monto' ? fmtM(Number(v)) : nf(Number(v)))} fill={ink.label} fontSize={10} />
                 </Bar>
