@@ -22,3 +22,11 @@ export interface ConteoMonto {
 }
 
 export type Dimension = 'plaza' | 'digital' | 'asesor' | 'cliente' | 'mueble' | 'categoria' | 'marca' | 'producto';
+
+export type Periodo = 'mes' | 'catorcena' | 'semana';
+
+export interface ConteoPeriodo {
+  periodo: number;
+  monto: number;
+  caras: number;
+}
