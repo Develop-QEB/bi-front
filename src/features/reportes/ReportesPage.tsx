@@ -445,6 +445,7 @@ function VariacionesView() {
   if (!r) return <div className="flex h-48 items-center justify-center"><Spinner size="lg" /></div>;
 
   const varData = [...r.variacionPorUsuario].sort((a, b) => a.neto - b.neto).map((v) => ({ ...v, corto: v.nombre.split(' ').slice(0, 2).join(' ') }));
+  const mayorVar = r.variacionPorUsuario.reduce<(typeof r.variacionPorUsuario)[number] | null>((m, v) => (Math.abs(v.neto) > Math.abs(m?.neto ?? 0) ? v : m), null);
   const dia = r.porDia.map((d) => ({ etiqueta: d.fecha.slice(5), agregadas: d.carasAgregadas, quitadas: -d.carasQuitadas }));
 
   return (
@@ -472,7 +473,10 @@ function VariacionesView() {
             </Bar>
           </BarChart>
         </ResponsiveContainer>
-        <p className="mt-1 text-center text-[11px] text-zinc-400">Verde = aprobó caras (DG/DCM) · Rojo = quitó reservas (tráfico)</p>
+        <p className="mt-1 text-center text-[11px] text-zinc-400">
+          Verde = aprobó caras (DG/DCM) · Rojo = quitó reservas (tráfico)
+          {mayorVar ? ` · Mayor variación neta: ${mayorVar.nombre.split(' ').slice(0, 2).join(' ')} (${mayorVar.neto >= 0 ? '+' : ''}${nf(mayorVar.neto)})` : ''}
+        </p>
       </div>
 
       <div className={CARD}>
@@ -555,6 +559,12 @@ function DistribucionView() {
   const [error, setError] = useState(false);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const ink = chartInk(isDark);
+  const asesoresObj = useObjetivosStore((s) => s.asesores);
+  const cargarObj = useObjetivosStore((s) => s.cargar);
+
+  useEffect(() => {
+    cargarObj(ANIO);
+  }, [cargarObj]);
 
   useEffect(() => {
     setData(null);
@@ -565,6 +575,14 @@ function DistribucionView() {
   const top = (data ?? []).slice(0, 12).map((d) => ({ ...d, valor: d[metric], corto: d.nombre.length > 26 ? d.nombre.slice(0, 25) + '…' : d.nombre }));
   const total = (data ?? []).reduce((a, d) => a + d[metric], 0);
   const fmt = (v: number) => (metric === 'monto' ? formatCurrency(v) : `${nf(v)} caras`);
+  const ovr =
+    dim === 'asesor'
+      ? (data ?? [])
+          .map((d) => ({ corto: d.nombre.length > 22 ? d.nombre.slice(0, 21) + '…' : d.nombre, real: d.monto, objetivo: asesorObjetivoDe(asesoresObj, ANIO, d.nombre) }))
+          .filter((x) => x.objetivo > 0)
+          .sort((a, b) => b.objetivo - a.objetivo)
+          .slice(0, 12)
+      : [];
 
   return (
     <div className="space-y-4">
@@ -611,6 +629,29 @@ function DistribucionView() {
               </BarChart>
             </ResponsiveContainer>
           </div>
+
+          {dim === 'asesor' && (
+            <div className={CARD}>
+              <h3 className="mb-2 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">Objetivo vs. real por asesor</h3>
+              {ovr.length ? (
+                <>
+                  <ResponsiveContainer width="100%" height={Math.max(240, ovr.length * 36)}>
+                    <BarChart data={ovr} layout="vertical" margin={{ top: 4, right: 60, left: 8, bottom: 4 }}>
+                      <CartesianGrid stroke={ink.grid} horizontal={false} />
+                      <XAxis type="number" tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
+                      <YAxis type="category" dataKey="corto" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={140} />
+                      <Tooltip cursor={{ fill: ink.cursor }} content={<TooltipChart format={(v) => formatCurrency(v)} />} />
+                      <Bar dataKey="objetivo" name="Objetivo" fill="#8b5cf6" opacity={0.35} radius={[0, 3, 3, 0]} maxBarSize={9} />
+                      <Bar dataKey="real" name="Real" fill="#8b5cf6" radius={[0, 3, 3, 0]} maxBarSize={9} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <p className="mt-1 text-center text-[11px] text-zinc-400">Barra clara = objetivo · barra sólida = real</p>
+                </>
+              ) : (
+                <p className="py-6 text-center text-xs text-zinc-400">Captura objetivos por asesor en <b>Objetivos → Paso 2</b> para comparar aquí.</p>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>
