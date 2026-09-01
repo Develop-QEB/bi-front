@@ -40,6 +40,10 @@ function StatCard({ titulo, valor, sub, tono = 'neutral' }: { titulo: string; va
 // ============ OBJETIVOS ============
 function ObjetivosView() {
   const [modo, setModo] = useState<'definir' | 'avance'>('definir');
+  const cargar = useObjetivosStore((s) => s.cargar);
+  useEffect(() => {
+    cargar(ANIO);
+  }, [cargar]);
   return (
     <div className="space-y-4">
       <div className="flex w-fit gap-1 rounded-lg bg-purple-500/10 p-1">

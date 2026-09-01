@@ -1,20 +1,27 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import {
+  delAsesores,
+  delMensual,
+  getObjetivos,
+  putAsesor,
+  putMensual,
+  putMensualBulk,
+} from '../services/objetivos.service';
 
 /**
- * Objetivos (metas $) guardados SOLO en el front (localStorage). No tocan la BD.
+ * Objetivos/metas del equipo. Ahora se guardan en la BD propia (bi-back →
+ * Hostinger), así son COMPARTIDOS y permanentes (antes eran localStorage por
+ * navegador). Se cargan con `cargar(anio)`; cada setter actualiza local
+ * (optimista) y lo manda al back.
  *
- * Dos partes:
- *  - `objetivos`: meta mensual del año (paso 1). Clave `${anio}-${mes}` (mes 1–12).
- *    El objetivo anual = suma de los 12 meses.
- *  - `asesores`: reparto del objetivo anual entre el equipo (paso 2). Clave
- *    `${anio}|${asesor}` → monto anual (MXN) de ese asesor.
+ * Claves internas (para no romper los componentes): `${anio}-${mes}` y `${anio}|${asesor}`.
  */
 interface ObjetivosState {
   objetivos: Record<string, number>;
   asesores: Record<string, number>;
+  cargar: (anio: number) => Promise<void>;
   setObjetivo: (anio: number, mes: number, monto: number) => void;
-  setObjetivosBulk: (anio: number, montos: number[]) => void; // 12 meses
+  setObjetivosBulk: (anio: number, montos: number[]) => void;
   setAsesor: (anio: number, asesor: string, monto: number) => void;
   limpiarAnio: (anio: number) => void;
   limpiarAsesores: (anio: number) => void;
@@ -23,37 +30,58 @@ interface ObjetivosState {
 const claveMes = (anio: number, mes: number) => `${anio}-${mes}`;
 const claveAsesor = (anio: number, asesor: string) => `${anio}|${asesor}`;
 
-export const useObjetivosStore = create<ObjetivosState>()(
-  persist(
-    (set) => ({
-      objetivos: {},
-      asesores: {},
-      setObjetivo: (anio, mes, monto) =>
-        set((s) => ({ objetivos: { ...s.objetivos, [claveMes(anio, mes)]: monto } })),
-      setObjetivosBulk: (anio, montos) =>
-        set((s) => {
-          const next = { ...s.objetivos };
-          montos.forEach((m, i) => (next[claveMes(anio, i + 1)] = m));
-          return { objetivos: next };
-        }),
-      setAsesor: (anio, asesor, monto) =>
-        set((s) => ({ asesores: { ...s.asesores, [claveAsesor(anio, asesor)]: monto } })),
-      limpiarAnio: (anio) =>
-        set((s) => {
-          const objetivos = { ...s.objetivos };
-          for (let m = 1; m <= 12; m++) delete objetivos[claveMes(anio, m)];
-          return { objetivos };
-        }),
-      limpiarAsesores: (anio) =>
-        set((s) => {
-          const asesores = { ...s.asesores };
-          for (const k of Object.keys(asesores)) if (k.startsWith(`${anio}|`)) delete asesores[k];
-          return { asesores };
-        }),
-    }),
-    { name: 'qeb-bi-objetivos' }
-  )
-);
+export const useObjetivosStore = create<ObjetivosState>((set) => ({
+  objetivos: {},
+  asesores: {},
+  cargar: async (anio) => {
+    try {
+      const d = await getObjetivos(anio);
+      set((s) => {
+        const objetivos = { ...s.objetivos };
+        const asesores = { ...s.asesores };
+        for (const k of Object.keys(objetivos)) if (k.startsWith(`${anio}-`)) delete objetivos[k];
+        for (const k of Object.keys(asesores)) if (k.startsWith(`${anio}|`)) delete asesores[k];
+        for (const [mes, monto] of Object.entries(d.mensual)) objetivos[claveMes(anio, Number(mes))] = Number(monto);
+        for (const [asesor, monto] of Object.entries(d.asesores)) asesores[claveAsesor(anio, asesor)] = Number(monto);
+        return { objetivos, asesores };
+      });
+    } catch {
+      /* back no disponible: deja lo que haya en memoria */
+    }
+  },
+  setObjetivo: (anio, mes, monto) => {
+    set((s) => ({ objetivos: { ...s.objetivos, [claveMes(anio, mes)]: monto } }));
+    putMensual(anio, mes, monto).catch(() => {});
+  },
+  setObjetivosBulk: (anio, montos) => {
+    set((s) => {
+      const next = { ...s.objetivos };
+      montos.forEach((m, i) => (next[claveMes(anio, i + 1)] = m));
+      return { objetivos: next };
+    });
+    putMensualBulk(anio, montos).catch(() => {});
+  },
+  setAsesor: (anio, asesor, monto) => {
+    set((s) => ({ asesores: { ...s.asesores, [claveAsesor(anio, asesor)]: monto } }));
+    putAsesor(anio, asesor, monto).catch(() => {});
+  },
+  limpiarAnio: (anio) => {
+    set((s) => {
+      const objetivos = { ...s.objetivos };
+      for (let m = 1; m <= 12; m++) delete objetivos[claveMes(anio, m)];
+      return { objetivos };
+    });
+    delMensual(anio).catch(() => {});
+  },
+  limpiarAsesores: (anio) => {
+    set((s) => {
+      const asesores = { ...s.asesores };
+      for (const k of Object.keys(asesores)) if (k.startsWith(`${anio}|`)) delete asesores[k];
+      return { asesores };
+    });
+    delAsesores(anio).catch(() => {});
+  },
+}));
 
 /** Meta del mes (0 si no se ha capturado). */
 export function objetivoDe(objetivos: Record<string, number>, anio: number, mes: number): number {
