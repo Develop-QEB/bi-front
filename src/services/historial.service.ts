@@ -1,5 +1,6 @@
 import { API_URL, WS_URL } from '../lib/api';
 import type { ContextoHistorial, EventoHistorial, FiltrosHistorial, ResumenHistorial } from '../types/historial';
+import type { Impacto } from '../types/reportes';
 
 function qs(f: Partial<FiltrosHistorial>): string {
   const p = new URLSearchParams();
@@ -30,6 +31,11 @@ export function getResumenHistorial(f: Partial<FiltrosHistorial> = {}): Promise<
 /** Detalle + línea de tiempo de una propuesta/campaña por su ref_id. */
 export function getContexto(refId: number): Promise<ContextoHistorial> {
   return getJSON<ContextoHistorial>(`/historial/contexto?refId=${refId}`);
+}
+
+/** Impacto en inversión (ediciones con delta de $) para el reporte de variaciones. */
+export function getImpacto(): Promise<Impacto> {
+  return getJSON<Impacto>('/reportes/impacto');
 }
 
 export type EstadoWS = 'conectado' | 'desconectado';

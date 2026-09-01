@@ -1,5 +1,5 @@
 import { API_URL } from '../lib/api';
-import type { ConteoMonto, ConteoPeriodo, Dimension, Embudo, Periodo } from '../types/reportes';
+import type { CampaniaDetalle, Ciclo, ConteoMonto, ConteoPeriodo, Dimension, Embudo, Periodo } from '../types/reportes';
 
 async function getJSON<T>(path: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`);
@@ -22,3 +22,6 @@ export function getVentasPeriodo(periodo: Periodo, anio = 2026, asesor?: string 
   const a = asesor ? `&asesor=${encodeURIComponent(asesor)}` : '';
   return getJSON<ConteoPeriodo[]>(`/reportes/ventas-periodo?periodo=${periodo}&anio=${anio}${a}`);
 }
+
+export const getCiclo = () => getJSON<Ciclo>('/reportes/ciclo');
+export const getCampanias = (limit = 40) => getJSON<CampaniaDetalle[]>(`/reportes/campanias?limit=${limit}`);

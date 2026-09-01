@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Filter, PieChart, Target, TrendingUp } from 'lucide-react';
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from 'recharts';
+import { ClipboardList, Filter, PieChart, Target, TrendingUp } from 'lucide-react';
 import { Spinner } from '../../components/ui/spinner';
 import { TooltipChart } from '../../components/charts/TooltipChart';
 import { cn } from '../../lib/utils';
@@ -8,12 +8,12 @@ import { formatCurrency } from '../../lib/format';
 import { chartInk } from '../../lib/chartTheme';
 import { useThemeStore } from '../../store/themeStore';
 import { getAsesores, getResumenVentas } from '../../services/resumenVentas.service';
-import { getResumenHistorial } from '../../services/historial.service';
-import { getDistribucion, getEmbudo, getVentasPeriodo } from '../../services/reportes.service';
+import { getImpacto, getResumenHistorial } from '../../services/historial.service';
+import { getCampanias, getCiclo, getDistribucion, getEmbudo, getVentasPeriodo } from '../../services/reportes.service';
 import { asesorObjetivoDe, objetivoAnual, objetivoDe, useObjetivosStore } from '../../store/objetivosStore';
 import type { ResumenVentas } from '../../types/bi';
 import type { ResumenHistorial } from '../../types/historial';
-import type { ConteoMonto, Dimension, Embudo, Periodo } from '../../types/reportes';
+import type { CampaniaDetalle, Ciclo, ConteoMonto, Dimension, Embudo, Impacto, Periodo } from '../../types/reportes';
 
 const ANIO = 2026;
 
@@ -346,9 +346,11 @@ function AvanceObjetivos() {
 // ============ EMBUDO ============
 function EmbudoView() {
   const [emb, setEmb] = useState<Embudo | null>(null);
+  const [ciclo, setCiclo] = useState<Ciclo | null>(null);
   const [error, setError] = useState(false);
   useEffect(() => {
     getEmbudo().then(setEmb).catch(() => setError(true));
+    getCiclo().then(setCiclo).catch(() => {});
   }, []);
   if (error) return <p className="text-sm text-rose-500">No se pudo cargar el embudo.</p>;
   if (!emb) return <div className="flex h-48 items-center justify-center"><Spinner size="lg" /></div>;
@@ -396,6 +398,29 @@ function EmbudoView() {
           ))}
         </div>
       </div>
+      {ciclo && (
+        <div className={CARD}>
+          <h3 className="mb-3 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">Ciclo de venta (Solicitud → Campaña)</h3>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div>
+              <p className="text-2xl font-semibold tabular-nums text-purple-700 dark:text-purple-200">{ciclo.cicloTotalDias}<span className="text-sm font-normal"> días</span></p>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">Ciclo total promedio</p>
+            </div>
+            <div>
+              <p className="text-2xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{ciclo.conversionGlobalPct}%</p>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">Conversión global</p>
+            </div>
+            {ciclo.etapas.map((e) => (
+              <div key={e.de}>
+                <p className="text-2xl font-semibold tabular-nums text-zinc-700 dark:text-zinc-200">{e.dias}<span className="text-sm font-normal"> d</span></p>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">{e.de} → {e.a}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] text-zinc-400">Tiempo promedio entre transiciones de estatus · {ciclo.total.toLocaleString('es-MX')} registros</p>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {colStatus('Solicitudes por estatus', emb.solicitud)}
         {colStatus('Propuestas por estatus', emb.propuesta)}
@@ -408,11 +433,13 @@ function EmbudoView() {
 // ============ VARIACIONES ============
 function VariacionesView() {
   const [r, setR] = useState<ResumenHistorial | null>(null);
+  const [imp, setImp] = useState<Impacto | null>(null);
   const [error, setError] = useState(false);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const ink = chartInk(isDark);
   useEffect(() => {
     getResumenHistorial().then(setR).catch(() => setError(true));
+    getImpacto().then(setImp).catch(() => {});
   }, []);
   if (error) return <p className="text-sm text-rose-500">No se pudo cargar variaciones.</p>;
   if (!r) return <div className="flex h-48 items-center justify-center"><Spinner size="lg" /></div>;
@@ -461,6 +488,50 @@ function VariacionesView() {
           </BarChart>
         </ResponsiveContainer>
       </div>
+
+      {imp && (
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatCard titulo="Impacto total en inversión" valor={formatCurrency(imp.total)} tono={imp.total >= 0 ? 'up' : 'down'} sub={`${imp.count} ediciones con $`} />
+            <StatCard titulo="Impacto promedio" valor={formatCurrency(imp.promedio)} tono={imp.promedio >= 0 ? 'up' : 'down'} />
+            <StatCard titulo="Mayor impacto" valor={imp.mayor ? formatCurrency(imp.mayor.monto ?? 0) : '—'} tono={(imp.mayor?.monto ?? 0) >= 0 ? 'up' : 'down'} sub={imp.mayor?.campania ?? imp.mayor?.usuario ?? ''} />
+            <StatCard titulo="Ediciones" valor={nf(imp.count)} sub="con cambio de $" />
+          </div>
+
+          <div className={CARD}>
+            <h3 className="mb-2 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">Dónde se concentran los ajustes de inversión</h3>
+            <ResponsiveContainer width="100%" height={240}>
+              <ScatterChart margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
+                <CartesianGrid stroke={ink.grid} />
+                <XAxis type="number" dataKey="caras" name="Caras" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
+                <YAxis type="number" dataKey="monto" name="Monto" tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={44} />
+                <ZAxis range={[45, 45]} />
+                <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<TooltipChart hideLabel format={(v, n) => (n === 'Monto' ? formatCurrency(v) : `${nf(v)} caras`)} />} />
+                <Scatter data={imp.puntos} fill="#8b5cf6" fillOpacity={0.6} />
+              </ScatterChart>
+            </ResponsiveContainer>
+            <p className="mt-1 text-center text-[11px] text-zinc-400">Cada punto = una edición · X: caras · Y: delta de $</p>
+          </div>
+
+          <div className={CARD}>
+            <h3 className="mb-2 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">Historial de ediciones</h3>
+            <div className="max-h-72 divide-y divide-purple-100/40 overflow-y-auto dark:divide-purple-900/20">
+              {imp.ediciones.map((e) => (
+                <div key={e.id} className="flex items-start justify-between gap-3 py-1.5 text-sm">
+                  <div className="min-w-0">
+                    <p className="truncate text-zinc-700 dark:text-zinc-200">{e.descripcion}</p>
+                    <p className="text-[11px] text-zinc-400">{new Date(e.fecha).toLocaleDateString('es-MX')}{e.campania ? ` · ${e.campania}` : ''}</p>
+                  </div>
+                  <span className={cn('shrink-0 tabular-nums font-medium', (e.monto ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
+                    {(e.monto ?? 0) >= 0 ? '+' : ''}{formatCurrency(e.monto ?? 0)}
+                  </span>
+                </div>
+              ))}
+              {!imp.ediciones.length && <p className="py-4 text-center text-xs text-zinc-400">Sin ediciones con cambio de monto en el periodo</p>}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -546,8 +617,75 @@ function DistribucionView() {
   );
 }
 
+// ============ CAMPAÑAS (detalle) ============
+function badgeStatus(s: string | null): string {
+  const x = (s ?? '').toLowerCase();
+  if (/final/.test(x)) return 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300';
+  if (/rechaz|cancel/.test(x)) return 'bg-rose-500/15 text-rose-700 dark:text-rose-300';
+  if (/aprob|iniciar/.test(x)) return 'bg-purple-500/15 text-purple-700 dark:text-purple-300';
+  return 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400';
+}
+
+function CampaniasView() {
+  const [rows, setRows] = useState<CampaniaDetalle[] | null>(null);
+  const [error, setError] = useState(false);
+  const [q, setQ] = useState('');
+  useEffect(() => {
+    getCampanias(100).then(setRows).catch(() => setError(true));
+  }, []);
+  if (error) return <p className="text-sm text-rose-500">No se pudo cargar campañas.</p>;
+  if (!rows) return <div className="flex h-48 items-center justify-center"><Spinner size="lg" /></div>;
+
+  const fil = rows.filter((c) => !q || `${c.nombre} ${c.cliente ?? ''} ${c.asesor ?? ''}`.toLowerCase().includes(q.toLowerCase()));
+  const fmtF = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }) : '—');
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard titulo="Campañas (recientes)" valor={nf(rows.length)} />
+        <StatCard titulo="Caras" valor={nf(rows.reduce((a, c) => a + c.totalCaras, 0))} />
+        <StatCard titulo="Activas / por iniciar" valor={nf(rows.filter((c) => /aprob|iniciar/i.test(c.status ?? '')).length)} tono="up" />
+        <StatCard titulo="Finalizadas" valor={nf(rows.filter((c) => /final/i.test(c.status ?? '')).length)} />
+      </div>
+      <div className={CARD}>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">Detalle de campañas (recientes)</h3>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar campaña, cliente, asesor…" className="w-60 rounded-full border border-purple-200/60 bg-white/70 px-3 py-1 text-xs outline-none dark:border-purple-900/40 dark:bg-[#1a1025]/70 dark:text-zinc-200" />
+        </div>
+        <div className="max-h-[560px] overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-white/90 dark:bg-[#1a1025]/90">
+              <tr className="text-left text-xs text-zinc-400">
+                <th className="py-1 pr-2">Campaña</th>
+                <th className="py-1 pr-2">Cliente</th>
+                <th className="py-1 pr-2">Asesor</th>
+                <th className="py-1 pr-2">Caras</th>
+                <th className="py-1 pr-2">Vigencia</th>
+                <th className="py-1">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fil.map((c) => (
+                <tr key={c.id} className="border-t border-purple-100/40 dark:border-purple-900/20">
+                  <td className="py-1.5 pr-2 font-medium text-zinc-700 dark:text-zinc-200">{c.nombre?.trim()}</td>
+                  <td className="max-w-[180px] truncate py-1.5 pr-2 text-zinc-500 dark:text-zinc-400">{c.cliente ?? '—'}</td>
+                  <td className="py-1.5 pr-2 text-zinc-500 dark:text-zinc-400">{c.asesor ?? '—'}</td>
+                  <td className="py-1.5 pr-2 tabular-nums text-zinc-600 dark:text-zinc-300">{nf(c.totalCaras)}</td>
+                  <td className="py-1.5 pr-2 text-xs text-zinc-500">{fmtF(c.fechaInicio)} – {fmtF(c.fechaFin)}</td>
+                  <td className="py-1.5"><span className={cn('rounded px-1.5 py-0.5 text-[11px] font-medium', badgeStatus(c.status))}>{c.status ?? '—'}</span></td>
+                </tr>
+              ))}
+              {!fil.length && <tr><td colSpan={6} className="py-6 text-center text-xs text-zinc-400">Sin resultados</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ============ página ============
-type Sub = 'objetivos' | 'embudo' | 'variaciones' | 'distribucion';
+type Sub = 'objetivos' | 'distribucion' | 'embudo' | 'variaciones' | 'campanias';
 
 export function ReportesPage() {
   const [sub, setSub] = useState<Sub>('objetivos');
@@ -556,6 +694,7 @@ export function ReportesPage() {
     { k: 'distribucion', label: 'Distribución', Icon: PieChart },
     { k: 'embudo', label: 'Embudo', Icon: Filter },
     { k: 'variaciones', label: 'Variaciones e impacto', Icon: TrendingUp },
+    { k: 'campanias', label: 'Campañas', Icon: ClipboardList },
   ];
 
   return (
@@ -584,6 +723,7 @@ export function ReportesPage() {
       {sub === 'distribucion' && <DistribucionView />}
       {sub === 'embudo' && <EmbudoView />}
       {sub === 'variaciones' && <VariacionesView />}
+      {sub === 'campanias' && <CampaniasView />}
     </div>
   );
 }
