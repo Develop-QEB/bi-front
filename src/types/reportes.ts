@@ -43,6 +43,7 @@ export interface CampaniaDetalle {
   nombre: string;
   status: string | null;
   totalCaras: number;
+  monto: number;
   fechaInicio: string | null;
   fechaFin: string | null;
   cliente: string | null;

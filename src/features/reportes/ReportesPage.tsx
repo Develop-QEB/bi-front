@@ -8,11 +8,10 @@ import { formatCurrency } from '../../lib/format';
 import { chartInk } from '../../lib/chartTheme';
 import { useThemeStore } from '../../store/themeStore';
 import { getAsesores, getResumenVentas } from '../../services/resumenVentas.service';
-import { getImpacto, getResumenHistorial } from '../../services/historial.service';
+import { getImpacto } from '../../services/historial.service';
 import { getCampanias, getCiclo, getDistribucion, getEmbudo, getVentasPeriodo } from '../../services/reportes.service';
 import { asesorObjetivoDe, objetivoAnual, objetivoDe, useObjetivosStore } from '../../store/objetivosStore';
 import type { ResumenVentas } from '../../types/bi';
-import type { ResumenHistorial } from '../../types/historial';
 import type { CampaniaDetalle, Ciclo, ConteoMonto, Dimension, Embudo, Impacto, Periodo } from '../../types/reportes';
 
 const ANIO = 2026;
@@ -431,111 +430,60 @@ function EmbudoView() {
 }
 
 // ============ VARIACIONES ============
-function VariacionesView() {
-  const [r, setR] = useState<ResumenHistorial | null>(null);
+function ImpactoView() {
   const [imp, setImp] = useState<Impacto | null>(null);
   const [error, setError] = useState(false);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const ink = chartInk(isDark);
   useEffect(() => {
-    getResumenHistorial().then(setR).catch(() => setError(true));
-    getImpacto().then(setImp).catch(() => {});
+    getImpacto().then(setImp).catch(() => setError(true));
   }, []);
-  if (error) return <p className="text-sm text-rose-500">No se pudo cargar variaciones.</p>;
-  if (!r) return <div className="flex h-48 items-center justify-center"><Spinner size="lg" /></div>;
+  if (error) return <p className="text-sm text-rose-500">No se pudo cargar el impacto.</p>;
+  if (!imp) return <div className="flex h-48 items-center justify-center"><Spinner size="lg" /></div>;
 
-  const varData = [...r.variacionPorUsuario].sort((a, b) => a.neto - b.neto).map((v) => ({ ...v, corto: v.nombre.split(' ').slice(0, 2).join(' ') }));
-  const mayorVar = r.variacionPorUsuario.reduce<(typeof r.variacionPorUsuario)[number] | null>((m, v) => (Math.abs(v.neto) > Math.abs(m?.neto ?? 0) ? v : m), null);
-  const dia = r.porDia.map((d) => ({ etiqueta: d.fecha.slice(5), agregadas: d.carasAgregadas, quitadas: -d.carasQuitadas }));
+  const puntos = imp.puntos.map((p) => ({ x: new Date(p.fecha).getTime(), monto: p.monto }));
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard titulo="Caras aprobadas ↑" valor={nf(r.carasAgregadas)} tono="up" sub="alzas (autorizaciones)" />
-        <StatCard titulo="Caras quitadas ↓" valor={nf(r.carasQuitadas)} tono="down" sub="bajas (eliminaciones)" />
-        <StatCard titulo="Neto" valor={nf(r.netoCaras)} tono={r.netoCaras >= 0 ? 'up' : 'down'} sub="alzas − bajas" />
-        <StatCard titulo="Autorizaciones" valor={nf(r.autorizaciones.total)} sub={`${r.autorizaciones.dg} DG · ${r.autorizaciones.dcm} DCM`} />
+        <StatCard titulo="Impacto total en inversión" valor={formatCurrency(imp.total)} tono={imp.total >= 0 ? 'up' : 'down'} sub={`${imp.count} ediciones con $`} />
+        <StatCard titulo="Impacto promedio" valor={formatCurrency(imp.promedio)} tono={imp.promedio >= 0 ? 'up' : 'down'} />
+        <StatCard titulo="Mayor impacto" valor={imp.mayor ? formatCurrency(imp.mayor.monto ?? 0) : '—'} tono={(imp.mayor?.monto ?? 0) >= 0 ? 'up' : 'down'} sub={imp.mayor?.campania ?? imp.mayor?.usuario ?? ''} />
+        <StatCard titulo="Ediciones" valor={nf(imp.count)} sub="con cambio de $" />
       </div>
 
       <div className={CARD}>
-        <h3 className="mb-2 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">Variación neta de caras por persona</h3>
-        <ResponsiveContainer width="100%" height={Math.max(220, varData.length * 34)}>
-          <BarChart data={varData} layout="vertical" margin={{ top: 4, right: 40, left: 8, bottom: 4 }}>
-            <CartesianGrid stroke={ink.grid} horizontal={false} />
-            <XAxis type="number" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
-            <YAxis type="category" dataKey="corto" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={110} />
-            <Tooltip cursor={{ fill: ink.cursor }} content={<TooltipChart format={(v) => `${nf(v)} caras`} />} />
-            <Bar dataKey="neto" radius={[0, 4, 4, 0]} maxBarSize={20}>
-              {varData.map((v) => (
-                <Cell key={v.nombre} fill={v.neto >= 0 ? '#10b981' : '#f43f5e'} />
-              ))}
-              <LabelList dataKey="neto" position="right" formatter={(v: unknown) => nf(Number(v))} fill={ink.label} fontSize={10} />
-            </Bar>
-          </BarChart>
+        <h3 className="mb-2 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">Dónde se concentran los ajustes de inversión</h3>
+        <ResponsiveContainer width="100%" height={260}>
+          <ScatterChart margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
+            <CartesianGrid stroke={ink.grid} />
+            <XAxis type="number" dataKey="x" name="Fecha" domain={['dataMin', 'dataMax']} tickFormatter={(v) => new Date(Number(v)).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
+            <YAxis type="number" dataKey="monto" name="Monto" tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={48} />
+            <ZAxis range={[45, 45]} />
+            <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<TooltipChart hideLabel format={(v, n) => (n === 'Monto' ? formatCurrency(v) : new Date(Number(v)).toLocaleDateString('es-MX'))} />} />
+            <Scatter data={puntos} fill="#8b5cf6" fillOpacity={0.6} />
+          </ScatterChart>
         </ResponsiveContainer>
-        <p className="mt-1 text-center text-[11px] text-zinc-400">
-          Verde = aprobó caras (DG/DCM) · Rojo = quitó reservas (tráfico)
-          {mayorVar ? ` · Mayor variación neta: ${mayorVar.nombre.split(' ').slice(0, 2).join(' ')} (${mayorVar.neto >= 0 ? '+' : ''}${nf(mayorVar.neto)})` : ''}
-        </p>
+        <p className="mt-1 text-center text-[11px] text-zinc-400">Cada punto = un ajuste de inversión · eje Y = delta en $</p>
       </div>
 
       <div className={CARD}>
-        <h3 className="mb-2 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">Alzas y bajas por día</h3>
-        <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={dia} stackOffset="sign" margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid stroke={ink.grid} vertical={false} />
-            <XAxis dataKey="etiqueta" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={16} />
-            <YAxis tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={44} tickFormatter={(v) => nf(Number(v))} />
-            <Tooltip cursor={{ fill: ink.cursor }} content={<TooltipChart format={(v) => `${nf(Math.abs(v))} caras`} />} />
-            <Bar dataKey="agregadas" name="Alzas" stackId="s" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={22} />
-            <Bar dataKey="quitadas" name="Bajas" stackId="s" fill="#f43f5e" radius={[0, 0, 3, 3]} maxBarSize={22} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {imp && (
-        <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <StatCard titulo="Impacto total en inversión" valor={formatCurrency(imp.total)} tono={imp.total >= 0 ? 'up' : 'down'} sub={`${imp.count} ediciones con $`} />
-            <StatCard titulo="Impacto promedio" valor={formatCurrency(imp.promedio)} tono={imp.promedio >= 0 ? 'up' : 'down'} />
-            <StatCard titulo="Mayor impacto" valor={imp.mayor ? formatCurrency(imp.mayor.monto ?? 0) : '—'} tono={(imp.mayor?.monto ?? 0) >= 0 ? 'up' : 'down'} sub={imp.mayor?.campania ?? imp.mayor?.usuario ?? ''} />
-            <StatCard titulo="Ediciones" valor={nf(imp.count)} sub="con cambio de $" />
-          </div>
-
-          <div className={CARD}>
-            <h3 className="mb-2 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">Dónde se concentran los ajustes de inversión</h3>
-            <ResponsiveContainer width="100%" height={240}>
-              <ScatterChart margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
-                <CartesianGrid stroke={ink.grid} />
-                <XAxis type="number" dataKey="caras" name="Caras" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
-                <YAxis type="number" dataKey="monto" name="Monto" tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={44} />
-                <ZAxis range={[45, 45]} />
-                <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<TooltipChart hideLabel format={(v, n) => (n === 'Monto' ? formatCurrency(v) : `${nf(v)} caras`)} />} />
-                <Scatter data={imp.puntos} fill="#8b5cf6" fillOpacity={0.6} />
-              </ScatterChart>
-            </ResponsiveContainer>
-            <p className="mt-1 text-center text-[11px] text-zinc-400">Cada punto = una edición · X: caras · Y: delta de $</p>
-          </div>
-
-          <div className={CARD}>
-            <h3 className="mb-2 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">Historial de ediciones</h3>
-            <div className="max-h-72 divide-y divide-purple-100/40 overflow-y-auto dark:divide-purple-900/20">
-              {imp.ediciones.map((e) => (
-                <div key={e.id} className="flex items-start justify-between gap-3 py-1.5 text-sm">
-                  <div className="min-w-0">
-                    <p className="truncate text-zinc-700 dark:text-zinc-200">{e.descripcion}</p>
-                    <p className="text-[11px] text-zinc-400">{new Date(e.fecha).toLocaleDateString('es-MX')}{e.campania ? ` · ${e.campania}` : ''}</p>
-                  </div>
-                  <span className={cn('shrink-0 tabular-nums font-medium', (e.monto ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
-                    {(e.monto ?? 0) >= 0 ? '+' : ''}{formatCurrency(e.monto ?? 0)}
-                  </span>
-                </div>
-              ))}
-              {!imp.ediciones.length && <p className="py-4 text-center text-xs text-zinc-400">Sin ediciones con cambio de monto en el periodo</p>}
+        <h3 className="mb-2 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">Historial de ediciones</h3>
+        <div className="max-h-80 divide-y divide-purple-100/40 overflow-y-auto dark:divide-purple-900/20">
+          {imp.ediciones.map((e) => (
+            <div key={e.id} className="flex items-start justify-between gap-3 py-1.5 text-sm">
+              <div className="min-w-0">
+                <p className="truncate text-zinc-700 dark:text-zinc-200">{e.descripcion}</p>
+                <p className="text-[11px] text-zinc-400">{new Date(e.fecha).toLocaleDateString('es-MX')}{e.campania ? ` · ${e.campania}` : ''}</p>
+              </div>
+              <span className={cn('shrink-0 tabular-nums font-medium', (e.monto ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
+                {(e.monto ?? 0) >= 0 ? '+' : ''}{formatCurrency(e.monto ?? 0)}
+              </span>
             </div>
-          </div>
-        </>
-      )}
+          ))}
+          {!imp.ediciones.length && <p className="py-4 text-center text-xs text-zinc-400">Sin ediciones con cambio de monto en el periodo</p>}
+        </div>
+      </div>
     </div>
   );
 }
@@ -554,7 +502,7 @@ const DIMS: { k: Dimension; label: string }[] = [
 
 function DistribucionView() {
   const [dim, setDim] = useState<Dimension>('plaza');
-  const [metric, setMetric] = useState<'monto' | 'caras'>('monto');
+  const metric = 'monto' as const;
   const [data, setData] = useState<ConteoMonto[] | null>(null);
   const [error, setError] = useState(false);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
@@ -592,13 +540,6 @@ function DistribucionView() {
             {d.label}
           </button>
         ))}
-        <div className="ml-auto flex gap-1 rounded-full bg-purple-500/10 p-0.5">
-          {(['monto', 'caras'] as const).map((m) => (
-            <button key={m} onClick={() => setMetric(m)} className={cn('rounded-full px-3 py-0.5 text-xs font-medium', metric === m ? 'bg-white text-purple-700 shadow dark:bg-[#241633] dark:text-purple-200' : 'text-zinc-500')}>
-              {m === 'monto' ? 'Monto' : 'Caras'}
-            </button>
-          ))}
-        </div>
       </div>
 
       {error ? (
@@ -684,8 +625,8 @@ function CampaniasView() {
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard titulo="Campañas (recientes)" valor={nf(rows.length)} />
-        <StatCard titulo="Caras" valor={nf(rows.reduce((a, c) => a + c.totalCaras, 0))} />
-        <StatCard titulo="Activas / por iniciar" valor={nf(rows.filter((c) => /aprob|iniciar/i.test(c.status ?? '')).length)} tono="up" />
+        <StatCard titulo="Inversión (recientes)" valor={formatCurrency(rows.reduce((a, c) => a + c.monto, 0))} tono="up" />
+        <StatCard titulo="Activas / por iniciar" valor={nf(rows.filter((c) => /aprob|iniciar/i.test(c.status ?? '')).length)} />
         <StatCard titulo="Finalizadas" valor={nf(rows.filter((c) => /final/i.test(c.status ?? '')).length)} />
       </div>
       <div className={CARD}>
@@ -700,6 +641,7 @@ function CampaniasView() {
                 <th className="py-1 pr-2">Campaña</th>
                 <th className="py-1 pr-2">Cliente</th>
                 <th className="py-1 pr-2">Asesor</th>
+                <th className="py-1 pr-2">Inversión</th>
                 <th className="py-1 pr-2">Caras</th>
                 <th className="py-1 pr-2">Vigencia</th>
                 <th className="py-1">Status</th>
@@ -711,12 +653,13 @@ function CampaniasView() {
                   <td className="py-1.5 pr-2 font-medium text-zinc-700 dark:text-zinc-200">{c.nombre?.trim()}</td>
                   <td className="max-w-[180px] truncate py-1.5 pr-2 text-zinc-500 dark:text-zinc-400">{c.cliente ?? '—'}</td>
                   <td className="py-1.5 pr-2 text-zinc-500 dark:text-zinc-400">{c.asesor ?? '—'}</td>
-                  <td className="py-1.5 pr-2 tabular-nums text-zinc-600 dark:text-zinc-300">{nf(c.totalCaras)}</td>
+                  <td className="py-1.5 pr-2 tabular-nums font-medium text-zinc-700 dark:text-zinc-200">{formatCurrency(c.monto)}</td>
+                  <td className="py-1.5 pr-2 tabular-nums text-zinc-500 dark:text-zinc-400">{nf(c.totalCaras)}</td>
                   <td className="py-1.5 pr-2 text-xs text-zinc-500">{fmtF(c.fechaInicio)} – {fmtF(c.fechaFin)}</td>
                   <td className="py-1.5"><span className={cn('rounded px-1.5 py-0.5 text-[11px] font-medium', badgeStatus(c.status))}>{c.status ?? '—'}</span></td>
                 </tr>
               ))}
-              {!fil.length && <tr><td colSpan={6} className="py-6 text-center text-xs text-zinc-400">Sin resultados</td></tr>}
+              {!fil.length && <tr><td colSpan={7} className="py-6 text-center text-xs text-zinc-400">Sin resultados</td></tr>}
             </tbody>
           </table>
         </div>
@@ -726,7 +669,7 @@ function CampaniasView() {
 }
 
 // ============ página ============
-type Sub = 'objetivos' | 'distribucion' | 'embudo' | 'variaciones' | 'campanias';
+type Sub = 'objetivos' | 'distribucion' | 'embudo' | 'impacto' | 'campanias';
 
 export function ReportesPage() {
   const [sub, setSub] = useState<Sub>('objetivos');
@@ -734,7 +677,7 @@ export function ReportesPage() {
     { k: 'objetivos', label: 'Objetivos', Icon: Target },
     { k: 'distribucion', label: 'Distribución', Icon: PieChart },
     { k: 'embudo', label: 'Embudo', Icon: Filter },
-    { k: 'variaciones', label: 'Variaciones e impacto', Icon: TrendingUp },
+    { k: 'impacto', label: 'Impacto en inversión', Icon: TrendingUp },
     { k: 'campanias', label: 'Campañas', Icon: ClipboardList },
   ];
 
@@ -763,7 +706,7 @@ export function ReportesPage() {
       {sub === 'objetivos' && <ObjetivosView />}
       {sub === 'distribucion' && <DistribucionView />}
       {sub === 'embudo' && <EmbudoView />}
-      {sub === 'variaciones' && <VariacionesView />}
+      {sub === 'impacto' && <ImpactoView />}
       {sub === 'campanias' && <CampaniasView />}
     </div>
   );
