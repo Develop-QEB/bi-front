@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from 'recharts';
-import { ClipboardList, Filter, PieChart, Target, TrendingUp } from 'lucide-react';
+import type { ReactNode } from 'react';
+import {
+  Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Line, Pie, PieChart,
+  ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis,
+} from 'recharts';
 import { Spinner } from '../../components/ui/spinner';
+import { MetricCard, ACCENTS } from '../../components/bi/MetricCard';
 import { TooltipChart } from '../../components/charts/TooltipChart';
 import { cn } from '../../lib/utils';
 import { formatCurrency } from '../../lib/format';
@@ -12,7 +16,7 @@ import { getImpacto } from '../../services/historial.service';
 import { getCampanias, getCiclo, getDistribucion, getEmbudo, getVentasPeriodo } from '../../services/reportes.service';
 import { asesorObjetivoDe, objetivoAnual, objetivoDe, useObjetivosStore } from '../../store/objetivosStore';
 import type { ResumenVentas } from '../../types/bi';
-import type { CampaniaDetalle, Ciclo, ConteoMonto, Dimension, Embudo, Impacto, Periodo } from '../../types/reportes';
+import type { CampaniaDetalle, Ciclo, ConteoMonto, Embudo, EtapaEmbudo, Impacto, Periodo } from '../../types/reportes';
 
 const ANIO = 2026;
 
@@ -22,22 +26,478 @@ const CARD = cn(
   'dark:border-purple-900/30 dark:bg-[#1a1025]/90 dark:shadow-purple-900/10'
 );
 const MESES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
-const fmtM = (v: number) => (Math.abs(v) >= 1e6 ? `$${(v / 1e6).toFixed(0)}M` : `$${(v / 1e3).toFixed(0)}k`);
+const fmtM = (v: number) => (Math.abs(v) >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${(v / 1e3).toFixed(0)}k`);
 const nf = (n: number) => n.toLocaleString('es-MX');
+const CardTitle = ({ children }: { children: ReactNode }) => (
+  <h3 className="mb-2 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">{children}</h3>
+);
 
-function StatCard({ titulo, valor, sub, tono = 'neutral' }: { titulo: string; valor: string; sub?: string; tono?: 'neutral' | 'up' | 'down' }) {
-  const c = { neutral: 'text-purple-700 dark:text-purple-200', up: 'text-emerald-600 dark:text-emerald-400', down: 'text-rose-600 dark:text-rose-400' }[tono];
+// Rampa morado → cyan para el funnel y acentos gráficos.
+const RAMP = ['#a855f7', '#8b5cf6', '#7c3aed', '#22d3ee', '#06b6d4', '#0891b2'];
+const DIGITAL_COLORS: Record<string, string> = { Digital: '#22d3ee', Tradicional: '#a855f7' };
+
+// ============================================================
+//  FUNNEL (cono) — trapecios centrados que se conectan
+// ============================================================
+function FunnelCono({ etapas }: { etapas: EtapaEmbudo[] }) {
+  const max = etapas[0]?.valor || 1;
   return (
-    <article className={CARD}>
-      <h3 className="text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">{titulo}</h3>
-      <p className={cn('mt-1 text-2xl font-semibold tabular-nums leading-none', c)}>{valor}</p>
-      {sub && <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{sub}</p>}
-    </article>
+    <div className="flex flex-col">
+      {etapas.map((e, i) => {
+        const topW = (e.valor / max) * 100;
+        const next = etapas[i + 1]?.valor ?? e.valor * 0.55;
+        const botRatio = e.valor ? next / e.valor : 0.55;
+        const clip = `polygon(0 0, 100% 0, ${(50 + (botRatio * 50)).toFixed(2)}% 100%, ${(50 - (botRatio * 50)).toFixed(2)}% 100%)`;
+        return (
+          <div key={e.nombre} className="flex items-center gap-3">
+            <span className="w-12 shrink-0 text-right text-sm font-semibold tabular-nums text-zinc-700 dark:text-zinc-200">
+              {nf(e.valor)}
+            </span>
+            <div className="relative flex-1">
+              <div
+                className="mx-auto flex h-11 items-center justify-center text-[11px] font-semibold text-white/90"
+                style={{ width: `${Math.max(6, topW)}%`, clipPath: clip, background: RAMP[i % RAMP.length] }}
+              >
+                <span className="opacity-90">{e.pct}%</span>
+              </div>
+            </div>
+            <span className="w-32 shrink-0 text-left text-xs text-zinc-500 dark:text-zinc-400">{e.nombre}</span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
-// ============ OBJETIVOS ============
-function ObjetivosView() {
+// Barra de progreso (ciclo de venta)
+function BarraCiclo({ label, dias, max, color }: { label: string; dias: number; max: number; color: string }) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-xs">
+        <span className="text-zinc-600 dark:text-zinc-300">{label}</span>
+        <span className="font-semibold tabular-nums text-zinc-700 dark:text-zinc-200">{dias} días</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-purple-500/10">
+        <div className="h-full rounded-full" style={{ width: `${Math.max(4, (dias / (max || 1)) * 100)}%`, background: color }} />
+      </div>
+    </div>
+  );
+}
+
+// Barras horizontales (distribución por dimensión)
+function BarrasDim({ data, color, height }: { data: ConteoMonto[]; color: string; height?: number }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const ink = chartInk(isDark);
+  const rows = data.slice(0, 7).map((d) => ({
+    ...d,
+    corto: d.nombre.length > 22 ? d.nombre.slice(0, 21) + '…' : d.nombre,
+  }));
+  return (
+    <ResponsiveContainer width="100%" height={height ?? Math.max(180, rows.length * 34)}>
+      <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 62, left: 8, bottom: 4 }}>
+        <CartesianGrid stroke={ink.grid} horizontal={false} />
+        <XAxis type="number" tickFormatter={(v) => fmtM(Number(v))} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
+        <YAxis type="category" dataKey="corto" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={130} />
+        <Tooltip cursor={{ fill: ink.cursor }} content={<TooltipChart format={(v) => formatCurrency(v)} />} />
+        <Bar dataKey="monto" fill={color} radius={[0, 4, 4, 0]} maxBarSize={20}>
+          <LabelList dataKey="monto" position="right" formatter={(v: unknown) => fmtM(Number(v))} fill={ink.label} fontSize={10} />
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+// ============================================================
+//  EMBUDO (página completa)
+// ============================================================
+export function EmbudoPage() {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const ink = chartInk(isDark);
+  const cargarObj = useObjetivosStore((s) => s.cargar);
+  const objetivos = useObjetivosStore((s) => s.objetivos);
+
+  const [emb, setEmb] = useState<Embudo | null>(null);
+  const [ciclo, setCiclo] = useState<Ciclo | null>(null);
+  const [camps, setCamps] = useState<CampaniaDetalle[] | null>(null);
+  const [plaza, setPlaza] = useState<ConteoMonto[]>([]);
+  const [digital, setDigital] = useState<ConteoMonto[]>([]);
+  const [mueble, setMueble] = useState<ConteoMonto[]>([]);
+  const [cliente, setCliente] = useState<ConteoMonto[]>([]);
+  const [asesor, setAsesor] = useState<ConteoMonto[]>([]);
+  const [porMes, setPorMes] = useState<{ etiqueta: string; monto: number; caras: number }[]>([]);
+  const [error, setError] = useState(false);
+
+  const [statusFiltro, setStatusFiltro] = useState<'todos' | 'activas' | 'finalizadas'>('todos');
+  const [q, setQ] = useState('');
+
+  useEffect(() => {
+    cargarObj(ANIO);
+    Promise.all([
+      getEmbudo().then(setEmb),
+      getCiclo().then(setCiclo).catch(() => {}),
+      getCampanias(120).then(setCamps).catch(() => setCamps([])),
+      getDistribucion('plaza').then(setPlaza).catch(() => {}),
+      getDistribucion('digital').then(setDigital).catch(() => {}),
+      getDistribucion('mueble').then(setMueble).catch(() => {}),
+      getDistribucion('cliente').then(setCliente).catch(() => {}),
+      getDistribucion('asesor').then(setAsesor).catch(() => {}),
+      getVentasPeriodo('mes', ANIO).then((rows) => {
+        const map = new Map(rows.map((r) => [r.periodo, r]));
+        setPorMes(MESES.map((etiqueta, i) => ({ etiqueta, monto: map.get(i + 1)?.monto ?? 0, caras: map.get(i + 1)?.caras ?? 0 })));
+      }).catch(() => {}),
+    ]).catch(() => setError(true));
+  }, [cargarObj]);
+
+  const montoTotal = useMemo(() => plaza.reduce((a, d) => a + d.monto, 0), [plaza]);
+  const anual = objetivoAnual(objetivos, ANIO);
+
+  if (error) return <p className="text-sm text-rose-500">No se pudo cargar el embudo.</p>;
+  if (!emb) return <div className="flex h-64 items-center justify-center"><Spinner size="lg" /></div>;
+
+  // El back a veces reporta totales.propuestas/campanias == solicitudes; usamos
+  // la progresión real del funnel (etapas) para los KPIs.
+  const etapaVal = (re: RegExp) => emb.etapas.find((e) => re.test(e.nombre.toLowerCase()))?.valor ?? 0;
+  const nSolic = emb.etapas[0]?.valor ?? emb.totales.solicitudes;
+  const nProp = etapaVal(/propuesta/) || emb.totales.propuestas;
+  const nCamp = etapaVal(/campañ|campan|activ/) || emb.totales.campanias;
+  const kpis = [
+    { titulo: 'Solicitudes', valor: nf(nSolic), sub: 'Registros creados' },
+    { titulo: 'Propuestas', valor: nf(nProp), sub: nSolic ? `${((nProp / nSolic) * 100).toFixed(1)}% de solicitudes` : '' },
+    { titulo: 'Campañas', valor: nf(nCamp), sub: nProp ? `${((nCamp / nProp) * 100).toFixed(1)}% de propuestas` : '' },
+    { titulo: 'Conversión global', valor: ciclo ? `${ciclo.conversionGlobalPct}%` : '—', sub: 'Solicitud → Campaña' },
+    { titulo: 'Monto vendido', valor: formatCurrency(montoTotal), sub: nCamp ? `Ticket prom. ${formatCurrency(Math.round(montoTotal / nCamp))}` : '' },
+    { titulo: 'Avance vs objetivo', valor: anual ? `${((montoTotal / anual) * 100).toFixed(1)}%` : '—', sub: anual ? `Meta ${fmtM(anual)}` : 'Sin objetivo capturado' },
+  ];
+
+  const campsFil = (camps ?? []).filter((c) => {
+    const s = (c.status ?? '').toLowerCase();
+    if (statusFiltro === 'activas' && !/aprob|iniciar|activ/.test(s)) return false;
+    if (statusFiltro === 'finalizadas' && !/final/.test(s)) return false;
+    return !q || `${c.nombre} ${c.cliente ?? ''} ${c.asesor ?? ''}`.toLowerCase().includes(q.toLowerCase());
+  });
+  const fmtF = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }) : '—');
+  const cicloMax = Math.max(ciclo?.cicloTotalDias ?? 1, ...(ciclo?.etapas.map((e) => e.dias) ?? [1]));
+  const topCli = cliente.slice(0, 8);
+
+  return (
+    <div className="space-y-4">
+      {/* 6 KPI con barra de gradiente */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        {kpis.map((k, i) => (
+          <MetricCard key={k.titulo} titulo={k.titulo} valor={k.valor} sub={k.sub} accent={ACCENTS[i % ACCENTS.length]} />
+        ))}
+      </div>
+
+      {/* Funnel + Ciclo */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className={CARD}>
+          <CardTitle>Embudo de conversión</CardTitle>
+          <p className="mb-4 text-[11px] text-zinc-400">Conteo de registros por etapa de estatus alcanzada</p>
+          <FunnelCono etapas={emb.etapas} />
+        </div>
+
+        {ciclo && (
+          <div className={CARD}>
+            <CardTitle>Ciclo de venta</CardTitle>
+            <p className="mb-4 text-[11px] text-zinc-400">Tiempo promedio entre transiciones de estatus (días)</p>
+            <div className="space-y-4">
+              {ciclo.etapas.map((e, i) => (
+                <BarraCiclo key={e.de} label={`${e.de} → ${e.a}`} dias={e.dias} max={cicloMax} color={RAMP[i % RAMP.length]} />
+              ))}
+              <BarraCiclo label="Ciclo total (Solicitud → Campaña)" dias={ciclo.cicloTotalDias} max={cicloMax} color="#f59e0b" />
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3 border-t border-purple-100/40 pt-3 dark:border-purple-900/20">
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-zinc-400">Conversión global</p>
+                <p className="text-xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{ciclo.conversionGlobalPct}%</p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-zinc-400">Registros analizados</p>
+                <p className="text-xl font-semibold tabular-nums text-purple-700 dark:text-purple-200">{nf(ciclo.total)}</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Detalle de campañas */}
+      <div className={CARD}>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <CardTitle>Detalle de campañas</CardTitle>
+            <p className="-mt-1 text-[11px] text-zinc-400">Registros con ID de campaña a lo largo del flujo Solicitud → Propuesta → Campaña.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1 rounded-full bg-purple-500/10 p-0.5">
+              {(['todos', 'activas', 'finalizadas'] as const).map((s) => (
+                <button key={s} onClick={() => setStatusFiltro(s)} className={cn('rounded-full px-3 py-0.5 text-xs font-medium capitalize', statusFiltro === s ? 'bg-white text-purple-700 shadow dark:bg-[#241633] dark:text-purple-200' : 'text-zinc-500')}>
+                  {s}
+                </button>
+              ))}
+            </div>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar…" className="w-44 rounded-full border border-purple-200/60 bg-white/70 px-3 py-1 text-xs outline-none dark:border-purple-900/40 dark:bg-[#1a1025]/70 dark:text-zinc-200" />
+          </div>
+        </div>
+        <div className="max-h-[420px] overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-white/90 dark:bg-[#1a1025]/90">
+              <tr className="text-left text-xs text-zinc-400">
+                <th className="py-1 pr-2">Campaña</th>
+                <th className="py-1 pr-2">Cliente</th>
+                <th className="py-1 pr-2">Asesor</th>
+                <th className="py-1 pr-2">Vigencia</th>
+                <th className="py-1 pr-2">Caras</th>
+                <th className="py-1 pr-2 text-right">Inversión</th>
+                <th className="py-1">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {campsFil.map((c) => (
+                <tr key={c.id} className="border-t border-purple-100/40 dark:border-purple-900/20">
+                  <td className="py-1.5 pr-2 font-medium text-zinc-700 dark:text-zinc-200">{c.nombre?.trim()}</td>
+                  <td className="max-w-[160px] truncate py-1.5 pr-2 text-zinc-500 dark:text-zinc-400">{c.cliente ?? '—'}</td>
+                  <td className="py-1.5 pr-2 text-zinc-500 dark:text-zinc-400">{c.asesor ?? '—'}</td>
+                  <td className="py-1.5 pr-2 text-xs text-zinc-500">{fmtF(c.fechaInicio)} – {fmtF(c.fechaFin)}</td>
+                  <td className="py-1.5 pr-2 tabular-nums text-zinc-500 dark:text-zinc-400">{nf(c.totalCaras)}</td>
+                  <td className="py-1.5 pr-2 text-right tabular-nums font-medium text-zinc-700 dark:text-zinc-200">{formatCurrency(c.monto)}</td>
+                  <td className="py-1.5"><span className={cn('rounded px-1.5 py-0.5 text-[11px] font-medium', badgeStatus(c.status))}>{c.status ?? '—'}</span></td>
+                </tr>
+              ))}
+              {!campsFil.length && <tr><td colSpan={7} className="py-6 text-center text-xs text-zinc-400">Sin resultados</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Top clientes + Ranking asesores */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className={CARD}>
+          <CardTitle>Top clientes</CardTitle>
+          <p className="-mt-1 mb-2 text-[11px] text-zinc-400">Por monto cerrado en el período</p>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-zinc-400">
+                <th className="py-1 pr-2">Cliente</th>
+                <th className="py-1 pr-2 text-right">Campañas</th>
+                <th className="py-1 pr-2 text-right">Monto</th>
+                <th className="py-1 text-right">Ticket prom.</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topCli.map((c) => (
+                <tr key={c.nombre} className="border-t border-purple-100/40 dark:border-purple-900/20">
+                  <td className="max-w-[200px] truncate py-1.5 pr-2 text-zinc-700 dark:text-zinc-200">{c.nombre}</td>
+                  <td className="py-1.5 pr-2 text-right tabular-nums text-zinc-500">{nf(c.n)}</td>
+                  <td className="py-1.5 pr-2 text-right tabular-nums font-medium text-zinc-700 dark:text-zinc-200">{formatCurrency(c.monto)}</td>
+                  <td className="py-1.5 text-right tabular-nums text-zinc-500">{formatCurrency(c.n ? Math.round(c.monto / c.n) : 0)}</td>
+                </tr>
+              ))}
+              {!topCli.length && <tr><td colSpan={4} className="py-4 text-center text-xs text-zinc-400">Sin datos</td></tr>}
+            </tbody>
+          </table>
+        </div>
+
+        <div className={CARD}>
+          <CardTitle>Ranking de asesores</CardTitle>
+          <p className="-mt-1 mb-2 text-[11px] text-zinc-400">Monto cerrado por asesor</p>
+          <BarrasDim data={asesor} color="#8b5cf6" height={Math.max(200, Math.min(asesor.length, 7) * 34)} />
+        </div>
+      </div>
+
+      {/* Análisis gráfico */}
+      <p className="pt-1 text-xs font-semibold uppercase tracking-wide text-purple-700/70 dark:text-purple-300/60">Análisis gráfico</p>
+
+      <div className={CARD}>
+        <CardTitle>Tendencia por mes</CardTitle>
+        <p className="-mt-1 mb-2 text-[11px] text-zinc-400">Caras cerradas (barras) y monto vendido (línea)</p>
+        <ResponsiveContainer width="100%" height={260}>
+          <ComposedChart data={porMes} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke={ink.grid} vertical={false} />
+            <XAxis dataKey="etiqueta" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
+            <YAxis yAxisId="caras" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={40} tickFormatter={(v) => nf(Number(v))} />
+            <YAxis yAxisId="monto" orientation="right" tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={48} />
+            <Tooltip cursor={{ fill: ink.cursor }} content={<TooltipChart format={(v, n) => (n === 'Monto' ? formatCurrency(v) : `${nf(v)} caras`)} />} />
+            <Bar yAxisId="caras" dataKey="caras" name="Caras" fill="#a855f7" radius={[4, 4, 0, 0]} maxBarSize={22} />
+            <Line yAxisId="monto" type="monotone" dataKey="monto" name="Monto" stroke="#22d3ee" strokeWidth={2.5} dot={{ r: 2.5 }} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className={CARD}>
+          <CardTitle>Monto por plaza</CardTitle>
+          <BarrasDim data={plaza} color="#8b5cf6" />
+        </div>
+        <div className={CARD}>
+          <CardTitle>Tradicional vs Digital</CardTitle>
+          <p className="-mt-1 mb-1 text-[11px] text-zinc-400">Distribución de monto por formato</p>
+          <ResponsiveContainer width="100%" height={220}>
+            <PieChart>
+              <Pie data={digital} dataKey="monto" nameKey="nombre" innerRadius={55} outerRadius={85} paddingAngle={2} stroke="none">
+                {digital.map((d) => <Cell key={d.nombre} fill={DIGITAL_COLORS[d.nombre] ?? '#8b5cf6'} />)}
+              </Pie>
+              <Tooltip content={<TooltipChart format={(v) => formatCurrency(v)} />} />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="flex justify-center gap-4">
+            {digital.map((d) => (
+              <span key={d.nombre} className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-300">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: DIGITAL_COLORS[d.nombre] ?? '#8b5cf6' }} />
+                {d.nombre} <b className="tabular-nums">{fmtM(d.monto)}</b>
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className={CARD}>
+          <CardTitle>Monto por tipo de mueble</CardTitle>
+          <BarrasDim data={mueble} color="#22d3ee" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+//  VARIACIONES E IMPACTO
+// ============================================================
+export function VariacionesPage() {
+  const [imp, setImp] = useState<Impacto | null>(null);
+  const [error, setError] = useState(false);
+  const [campoFiltro, setCampoFiltro] = useState<'todos' | 'caras' | 'monto'>('todos');
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const ink = chartInk(isDark);
+
+  useEffect(() => {
+    getImpacto().then(setImp).catch(() => setError(true));
+  }, []);
+  if (error) return <p className="text-sm text-rose-500">No se pudo cargar el impacto.</p>;
+  if (!imp) return <div className="flex h-64 items-center justify-center"><Spinner size="lg" /></div>;
+
+  const alzas = imp.ediciones.filter((e) => (e.monto ?? 0) > 0);
+  const bajas = imp.ediciones.filter((e) => (e.monto ?? 0) < 0);
+  const sumAlzas = alzas.reduce((a, e) => a + (e.monto ?? 0), 0);
+  const sumBajas = bajas.reduce((a, e) => a + (e.monto ?? 0), 0);
+  const campaniasEditadas = new Set(imp.ediciones.map((e) => e.campania ?? e.refId)).size;
+
+  const kpis = [
+    { titulo: 'Ediciones registradas', valor: nf(imp.count), sub: `${campaniasEditadas} campañas afectadas`, tono: 'neutral' as const, accent: ACCENTS[0] },
+    { titulo: 'Variación neta', valor: `${imp.total >= 0 ? '+' : ''}${formatCurrency(imp.total)}`, sub: 'Impacto total en inversión', tono: imp.total >= 0 ? 'up' as const : 'down' as const, accent: ACCENTS[1] },
+    { titulo: 'Impacto promedio', valor: `${imp.promedio >= 0 ? '+' : ''}${formatCurrency(imp.promedio)}`, sub: 'Magnitud por edición', tono: imp.promedio >= 0 ? 'up' as const : 'down' as const, accent: ACCENTS[2] },
+    { titulo: 'Alzas', valor: `+${formatCurrency(sumAlzas)}`, sub: `${alzas.length} ediciones al alza`, tono: 'up' as const, accent: ACCENTS[3] },
+    { titulo: 'Bajas', valor: formatCurrency(sumBajas), sub: `${bajas.length} ediciones a la baja`, tono: 'down' as const, accent: ACCENTS[4] },
+    { titulo: 'Mayor impacto', valor: imp.mayor ? formatCurrency(imp.mayor.monto ?? 0) : '—', sub: imp.mayor?.campania ?? imp.mayor?.usuario ?? '', tono: (imp.mayor?.monto ?? 0) >= 0 ? 'up' as const : 'down' as const, accent: ACCENTS[5] },
+  ];
+
+  const puntos = imp.puntos.map((p) => ({ x: new Date(p.fecha).getTime(), monto: p.monto }));
+  const filas = imp.ediciones.filter((e) => {
+    if (campoFiltro === 'caras') return e.carasAntes != null;
+    if (campoFiltro === 'monto') return e.invAntes != null || (e.monto ?? 0) !== 0;
+    return true;
+  });
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        Cada registro proviene del historial de acciones: una edición de caras o tarifa que modificó la inversión de una campaña ya creada (venta cerrada).
+      </p>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        {kpis.map((k) => (
+          <MetricCard key={k.titulo} titulo={k.titulo} valor={k.valor} sub={k.sub} tono={k.tono} accent={k.accent} />
+        ))}
+      </div>
+
+      <div className={CARD}>
+        <CardTitle>Dónde se concentran los ajustes de inversión</CardTitle>
+        <ResponsiveContainer width="100%" height={240}>
+          <ScatterChart margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
+            <CartesianGrid stroke={ink.grid} />
+            <XAxis type="number" dataKey="x" name="Fecha" domain={['dataMin', 'dataMax']} tickFormatter={(v) => new Date(Number(v)).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
+            <YAxis type="number" dataKey="monto" name="Monto" tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={48} />
+            <ZAxis range={[45, 45]} />
+            <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<TooltipChart hideLabel format={(v, n) => (n === 'Monto' ? formatCurrency(v) : new Date(Number(v)).toLocaleDateString('es-MX'))} />} />
+            <Scatter data={puntos} fill="#8b5cf6" fillOpacity={0.6} />
+          </ScatterChart>
+        </ResponsiveContainer>
+        <p className="mt-1 text-center text-[11px] text-zinc-400">Cada punto = un ajuste de inversión · eje Y = delta en $</p>
+      </div>
+
+      <div className={CARD}>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <CardTitle>Historial de ediciones</CardTitle>
+            <p className="-mt-1 text-[11px] text-zinc-400">Audit log con campaña, quién editó y el impacto en inversión</p>
+          </div>
+          <div className="flex gap-1 rounded-full bg-purple-500/10 p-0.5">
+            {(['todos', 'caras', 'monto'] as const).map((c) => (
+              <button key={c} onClick={() => setCampoFiltro(c)} className={cn('rounded-full px-3 py-0.5 text-xs font-medium capitalize', campoFiltro === c ? 'bg-white text-purple-700 shadow dark:bg-[#241633] dark:text-purple-200' : 'text-zinc-500')}>
+                {c === 'monto' ? 'Tarifa' : c}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="max-h-[460px] overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-white/90 dark:bg-[#1a1025]/90">
+              <tr className="text-left text-xs text-zinc-400">
+                <th className="py-1 pr-2">Fecha</th>
+                <th className="py-1 pr-2">Campaña</th>
+                <th className="py-1 pr-2">Usuario</th>
+                <th className="py-1 pr-2">Campo</th>
+                <th className="py-1 pr-2">Caras (antes → después)</th>
+                <th className="py-1 pr-2">Inversión (antes → después)</th>
+                <th className="py-1 text-right">Δ Inversión</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map((e) => {
+                const campos: string[] = [];
+                if (e.carasAntes != null) campos.push('Caras');
+                if (e.invAntes != null) campos.push('Tarifa');
+                return (
+                  <tr key={e.id} className="border-t border-purple-100/40 dark:border-purple-900/20">
+                    <td className="py-1.5 pr-2 text-xs text-zinc-500">{new Date(e.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}</td>
+                    <td className="max-w-[150px] truncate py-1.5 pr-2 font-medium text-zinc-700 dark:text-zinc-200">{e.campania ?? '—'}</td>
+                    <td className="max-w-[130px] truncate py-1.5 pr-2 text-zinc-500 dark:text-zinc-400">{e.usuario ?? '—'}</td>
+                    <td className="py-1.5 pr-2">
+                      <span className="flex gap-1">
+                        {campos.length ? campos.map((c) => (
+                          <span key={c} className={cn('rounded px-1.5 py-0.5 text-[10px] font-medium', c === 'Caras' ? 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300' : 'bg-amber-500/15 text-amber-700 dark:text-amber-300')}>{c}</span>
+                        )) : <span className="text-xs text-zinc-400">—</span>}
+                      </span>
+                    </td>
+                    <td className="py-1.5 pr-2 text-xs tabular-nums">
+                      {e.carasAntes != null ? (
+                        <span className="text-zinc-600 dark:text-zinc-300">
+                          {e.carasAntes} <span className="text-zinc-400">→</span> {e.carasDespues}
+                          <span className={cn('ml-1', e.caras > 0 ? 'text-emerald-600 dark:text-emerald-400' : e.caras < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-400')}>({e.caras > 0 ? '+' : ''}{e.caras})</span>
+                        </span>
+                      ) : <span className="text-zinc-400">—</span>}
+                    </td>
+                    <td className="py-1.5 pr-2 text-xs tabular-nums">
+                      {e.invAntes != null ? (
+                        <span className="text-zinc-600 dark:text-zinc-300">{fmtM(e.invAntes)} <span className="text-zinc-400">→</span> {fmtM(e.invDespues ?? 0)}</span>
+                      ) : <span className="text-zinc-400">—</span>}
+                    </td>
+                    <td className={cn('py-1.5 text-right tabular-nums font-medium', (e.monto ?? 0) > 0 ? 'text-emerald-600 dark:text-emerald-400' : (e.monto ?? 0) < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-400')}>
+                      {e.monto ? `${e.monto > 0 ? '+' : ''}${formatCurrency(e.monto)}` : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+              {!filas.length && <tr><td colSpan={7} className="py-6 text-center text-xs text-zinc-400">Sin ediciones en el período</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+//  OBJETIVOS
+// ============================================================
+export function ObjetivosPage() {
   const [modo, setModo] = useState<'definir' | 'avance'>('definir');
   const cargar = useObjetivosStore((s) => s.cargar);
   useEffect(() => {
@@ -57,7 +517,6 @@ function ObjetivosView() {
   );
 }
 
-// --- Definir: Paso 1 (global mensual) + Paso 2 (por asesor) ---
 function DefinirObjetivos() {
   const objetivos = useObjetivosStore((s) => s.objetivos);
   const asesoresObj = useObjetivosStore((s) => s.asesores);
@@ -92,6 +551,7 @@ function DefinirObjetivos() {
   }, [ventas]);
 
   const anual = objetivoAnual(objetivos, ANIO);
+  const realAcum = realMes.reduce((a, b) => a + b, 0);
 
   const regenerar = () => {
     const total = (Number(anualTarget) || 0) * 1e6;
@@ -107,9 +567,18 @@ function DefinirObjetivos() {
 
   const filas = MESES.map((etiqueta, i) => ({ mes: i + 1, etiqueta, objetivo: objetivoDe(objetivos, ANIO, i + 1), real: realMes[i] }));
   const sumAsesores = asesores.reduce((a, x) => a + asesorObjetivoDe(asesoresObj, ANIO, x), 0);
+  const cuadra = anual > 0 && Math.abs(sumAsesores - anual) < 1;
 
   return (
     <div className="space-y-4">
+      {/* Resumen */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <MetricCard titulo="Objetivo anual" valor={formatCurrency(anual)} sub="Suma de los 12 meses" accent="purple" />
+        <MetricCard titulo="Real acumulado" valor={formatCurrency(realAcum)} sub="Ventas del período" accent="cyan" tono="up" />
+        <MetricCard titulo="Avance" valor={anual ? `${((realAcum / anual) * 100).toFixed(1)}%` : '—'} sub="Real / objetivo anual" accent="green" />
+        <MetricCard titulo="Brecha" valor={anual ? formatCurrency(realAcum - anual) : '—'} sub="Falta para la meta" accent="pink" tono={realAcum >= anual ? 'up' : 'down'} />
+      </div>
+
       {/* PASO 1 */}
       <div className={CARD}>
         <h3 className="mb-1 text-sm font-semibold text-purple-700 dark:text-purple-200">Paso 1 · Objetivo global (mensual)</h3>
@@ -147,19 +616,24 @@ function DefinirObjetivos() {
       <div className={CARD}>
         <div className="mb-1 flex items-center justify-between gap-2">
           <h3 className="text-sm font-semibold text-purple-700 dark:text-purple-200">Paso 2 · Reparto por asesor</h3>
-          <div className="flex gap-1 rounded-full bg-purple-500/10 p-0.5">
-            {(['pct', 'monto'] as const).map((c) => (
-              <button key={c} onClick={() => setCaptura(c)} className={cn('rounded-full px-3 py-0.5 text-xs font-medium', captura === c ? 'bg-white text-purple-700 shadow dark:bg-[#241633] dark:text-purple-200' : 'text-zinc-500')}>
-                {c === 'pct' ? 'Por %' : 'Por monto'}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium', cuadra ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-zinc-500/10 text-zinc-500')}>
+              {cuadra ? 'Cuadra ✓' : anual ? `${((sumAsesores / anual) * 100).toFixed(0)}%` : '—'}
+            </span>
+            <div className="flex gap-1 rounded-full bg-purple-500/10 p-0.5">
+              {(['pct', 'monto'] as const).map((c) => (
+                <button key={c} onClick={() => setCaptura(c)} className={cn('rounded-full px-3 py-0.5 text-xs font-medium', captura === c ? 'bg-white text-purple-700 shadow dark:bg-[#241633] dark:text-purple-200' : 'text-zinc-500')}>
+                  {c === 'pct' ? 'Por %' : 'Por monto'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         <p className="mb-3 text-xs text-zinc-500 dark:text-zinc-400">Distribuye el objetivo anual ({formatCurrency(anual)}) entre el equipo. La otra columna se calcula sola.</p>
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <button onClick={repartirPorVentas} disabled={!anual} className="rounded-md bg-purple-500/15 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-500/25 disabled:opacity-40 dark:text-purple-300">Repartir según ventas</button>
           <button onClick={() => limpiarAsesores(ANIO)} className="rounded-md bg-purple-500/10 px-2 py-1 text-xs text-purple-700 hover:bg-purple-500/20 dark:text-purple-300">Limpiar reparto</button>
-          <span className={cn('ml-auto text-xs', anual && Math.abs(sumAsesores - anual) < 1 ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-500 dark:text-zinc-400')}>
+          <span className={cn('ml-auto text-xs', cuadra ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-500 dark:text-zinc-400')}>
             Repartido: {formatCurrency(sumAsesores)} / {formatCurrency(anual)}{anual ? ` · restante ${formatCurrency(anual - sumAsesores)}` : ''}
           </span>
         </div>
@@ -205,7 +679,6 @@ function DefinirObjetivos() {
   );
 }
 
-// --- Avance: real (cerrado) vs meta por período ---
 function AvanceObjetivos() {
   const objetivos = useObjetivosStore((s) => s.objetivos);
   const asesoresObj = useObjetivosStore((s) => s.asesores);
@@ -273,10 +746,10 @@ function AvanceObjetivos() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard titulo="Meta del período" valor={formatCurrency(totObj)} sub={asesorSel || 'todo el equipo'} />
-        <StatCard titulo="Cerrado (real)" valor={formatCurrency(totReal)} tono="up" />
-        <StatCard titulo="Falta para la meta" valor={formatCurrency(Math.max(0, totObj - totReal))} tono={totReal >= totObj ? 'up' : 'down'} sub={totObj && totReal >= totObj ? 'meta alcanzada' : ''} />
-        <StatCard titulo="Cumplimiento" valor={totObj ? `${((totReal / totObj) * 100).toFixed(0)}%` : '—'} tono={totReal >= totObj ? 'up' : 'down'} />
+        <MetricCard titulo="Meta del período" valor={formatCurrency(totObj)} sub={asesorSel || 'todo el equipo'} accent="purple" />
+        <MetricCard titulo="Cerrado (real)" valor={formatCurrency(totReal)} tono="up" accent="cyan" />
+        <MetricCard titulo="Falta para la meta" valor={formatCurrency(Math.max(0, totObj - totReal))} tono={totReal >= totObj ? 'up' : 'down'} sub={totObj && totReal >= totObj ? 'meta alcanzada' : ''} accent="orange" />
+        <MetricCard titulo="Cumplimiento" valor={totObj ? `${((totReal / totObj) * 100).toFixed(0)}%` : '—'} tono={totReal >= totObj ? 'up' : 'down'} accent="green" />
       </div>
 
       {!real ? (
@@ -284,7 +757,7 @@ function AvanceObjetivos() {
       ) : (
         <>
           <div className={CARD}>
-            <h3 className="mb-2 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">Cerrado vs meta del período</h3>
+            <CardTitle>Cerrado vs meta del período</CardTitle>
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={filas} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid stroke={ink.grid} vertical={false} />
@@ -342,372 +815,13 @@ function AvanceObjetivos() {
   );
 }
 
-// ============ EMBUDO ============
-function EmbudoView() {
-  const [emb, setEmb] = useState<Embudo | null>(null);
-  const [ciclo, setCiclo] = useState<Ciclo | null>(null);
-  const [error, setError] = useState(false);
-  useEffect(() => {
-    getEmbudo().then(setEmb).catch(() => setError(true));
-    getCiclo().then(setCiclo).catch(() => {});
-  }, []);
-  if (error) return <p className="text-sm text-rose-500">No se pudo cargar el embudo.</p>;
-  if (!emb) return <div className="flex h-48 items-center justify-center"><Spinner size="lg" /></div>;
-
-  const colStatus = (titulo: string, items: Embudo['solicitud']) => (
-    <div className={CARD}>
-      <h3 className="mb-2 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">{titulo}</h3>
-      <div className="space-y-2">
-        {items.map((s) => {
-          const max = items[0]?.valor || 1;
-          return (
-            <div key={s.nombre}>
-              <div className="flex justify-between text-xs">
-                <span className="truncate text-zinc-600 dark:text-zinc-300">{s.nombre}</span>
-                <span className="tabular-nums text-zinc-500">{s.valor}</span>
-              </div>
-              <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-purple-500/10">
-                <div className="h-full rounded-full bg-purple-400/70" style={{ width: `${Math.max(3, (s.valor / max) * 100)}%` }} />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="space-y-4">
-      <div className={CARD}>
-        <h3 className="mb-4 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">Embudo de conversión (Solicitud → Propuesta → Campaña)</h3>
-        <div className="space-y-2">
-          {emb.etapas.map((e, i) => (
-            <div key={e.nombre} className="flex items-center gap-3">
-              <span className="w-40 shrink-0 text-right text-xs text-zinc-500 dark:text-zinc-400">{e.nombre}</span>
-              <div className="flex-1">
-                <div
-                  className="flex h-9 items-center justify-between rounded-lg bg-gradient-to-r from-purple-500 to-fuchsia-500 px-3 text-sm font-semibold text-white shadow"
-                  style={{ width: `${Math.max(18, e.pct)}%`, opacity: 1 - i * 0.13 }}
-                >
-                  <span className="tabular-nums">{nf(e.valor)}</span>
-                  <span className="text-xs opacity-90">{e.pct}%</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-      {ciclo && (
-        <div className={CARD}>
-          <h3 className="mb-3 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">Ciclo de venta (Solicitud → Campaña)</h3>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div>
-              <p className="text-2xl font-semibold tabular-nums text-purple-700 dark:text-purple-200">{ciclo.cicloTotalDias}<span className="text-sm font-normal"> días</span></p>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">Ciclo total promedio</p>
-            </div>
-            <div>
-              <p className="text-2xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{ciclo.conversionGlobalPct}%</p>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">Conversión global</p>
-            </div>
-            {ciclo.etapas.map((e) => (
-              <div key={e.de}>
-                <p className="text-2xl font-semibold tabular-nums text-zinc-700 dark:text-zinc-200">{e.dias}<span className="text-sm font-normal"> d</span></p>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">{e.de} → {e.a}</p>
-              </div>
-            ))}
-          </div>
-          <p className="mt-2 text-[11px] text-zinc-400">Tiempo promedio entre transiciones de estatus · {ciclo.total.toLocaleString('es-MX')} registros</p>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {colStatus('Solicitudes por estatus', emb.solicitud)}
-        {colStatus('Propuestas por estatus', emb.propuesta)}
-        {colStatus('Campañas por estatus', emb.campania)}
-      </div>
-    </div>
-  );
-}
-
-// ============ VARIACIONES ============
-function ImpactoView() {
-  const [imp, setImp] = useState<Impacto | null>(null);
-  const [error, setError] = useState(false);
-  const isDark = useThemeStore((s) => s.theme) === 'dark';
-  const ink = chartInk(isDark);
-  useEffect(() => {
-    getImpacto().then(setImp).catch(() => setError(true));
-  }, []);
-  if (error) return <p className="text-sm text-rose-500">No se pudo cargar el impacto.</p>;
-  if (!imp) return <div className="flex h-48 items-center justify-center"><Spinner size="lg" /></div>;
-
-  const puntos = imp.puntos.map((p) => ({ x: new Date(p.fecha).getTime(), monto: p.monto }));
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard titulo="Impacto total en inversión" valor={formatCurrency(imp.total)} tono={imp.total >= 0 ? 'up' : 'down'} sub={`${imp.count} ediciones con $`} />
-        <StatCard titulo="Impacto promedio" valor={formatCurrency(imp.promedio)} tono={imp.promedio >= 0 ? 'up' : 'down'} />
-        <StatCard titulo="Mayor impacto" valor={imp.mayor ? formatCurrency(imp.mayor.monto ?? 0) : '—'} tono={(imp.mayor?.monto ?? 0) >= 0 ? 'up' : 'down'} sub={imp.mayor?.campania ?? imp.mayor?.usuario ?? ''} />
-        <StatCard titulo="Ediciones" valor={nf(imp.count)} sub="con cambio de $" />
-      </div>
-
-      <div className={CARD}>
-        <h3 className="mb-2 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">Dónde se concentran los ajustes de inversión</h3>
-        <ResponsiveContainer width="100%" height={260}>
-          <ScatterChart margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
-            <CartesianGrid stroke={ink.grid} />
-            <XAxis type="number" dataKey="x" name="Fecha" domain={['dataMin', 'dataMax']} tickFormatter={(v) => new Date(Number(v)).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
-            <YAxis type="number" dataKey="monto" name="Monto" tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={48} />
-            <ZAxis range={[45, 45]} />
-            <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<TooltipChart hideLabel format={(v, n) => (n === 'Monto' ? formatCurrency(v) : new Date(Number(v)).toLocaleDateString('es-MX'))} />} />
-            <Scatter data={puntos} fill="#8b5cf6" fillOpacity={0.6} />
-          </ScatterChart>
-        </ResponsiveContainer>
-        <p className="mt-1 text-center text-[11px] text-zinc-400">Cada punto = un ajuste de inversión · eje Y = delta en $</p>
-      </div>
-
-      <div className={CARD}>
-        <h3 className="mb-2 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">Historial de ediciones</h3>
-        <div className="max-h-80 divide-y divide-purple-100/40 overflow-y-auto dark:divide-purple-900/20">
-          {imp.ediciones.map((e) => (
-            <div key={e.id} className="flex items-start justify-between gap-3 py-1.5 text-sm">
-              <div className="min-w-0">
-                <p className="truncate text-zinc-700 dark:text-zinc-200">{e.descripcion}</p>
-                <p className="text-[11px] text-zinc-400">{new Date(e.fecha).toLocaleDateString('es-MX')}{e.campania ? ` · ${e.campania}` : ''}</p>
-              </div>
-              <span className={cn('shrink-0 tabular-nums font-medium', (e.monto ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
-                {(e.monto ?? 0) >= 0 ? '+' : ''}{formatCurrency(e.monto ?? 0)}
-              </span>
-            </div>
-          ))}
-          {!imp.ediciones.length && <p className="py-4 text-center text-xs text-zinc-400">Sin ediciones con cambio de monto en el periodo</p>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ============ DISTRIBUCIÓN ============
-const DIMS: { k: Dimension; label: string }[] = [
-  { k: 'plaza', label: 'Plaza' },
-  { k: 'digital', label: 'Digital / Tradicional' },
-  { k: 'asesor', label: 'Asesor' },
-  { k: 'cliente', label: 'Cliente' },
-  { k: 'marca', label: 'Marca' },
-  { k: 'producto', label: 'Producto' },
-  { k: 'mueble', label: 'Tipo de mueble' },
-  { k: 'categoria', label: 'Categoría' },
-];
-
-function DistribucionView() {
-  const [dim, setDim] = useState<Dimension>('plaza');
-  const metric = 'monto' as const;
-  const [data, setData] = useState<ConteoMonto[] | null>(null);
-  const [error, setError] = useState(false);
-  const isDark = useThemeStore((s) => s.theme) === 'dark';
-  const ink = chartInk(isDark);
-  const asesoresObj = useObjetivosStore((s) => s.asesores);
-  const cargarObj = useObjetivosStore((s) => s.cargar);
-
-  useEffect(() => {
-    cargarObj(ANIO);
-  }, [cargarObj]);
-
-  useEffect(() => {
-    setData(null);
-    setError(false);
-    getDistribucion(dim).then(setData).catch(() => setError(true));
-  }, [dim]);
-
-  const top = (data ?? []).slice(0, 12).map((d) => ({ ...d, valor: d[metric], corto: d.nombre.length > 26 ? d.nombre.slice(0, 25) + '…' : d.nombre }));
-  const total = (data ?? []).reduce((a, d) => a + d[metric], 0);
-  const fmt = (v: number) => (metric === 'monto' ? formatCurrency(v) : `${nf(v)} caras`);
-  const ovr =
-    dim === 'asesor'
-      ? (data ?? [])
-          .map((d) => ({ corto: d.nombre.length > 22 ? d.nombre.slice(0, 21) + '…' : d.nombre, real: d.monto, objetivo: asesorObjetivoDe(asesoresObj, ANIO, d.nombre) }))
-          .filter((x) => x.objetivo > 0)
-          .sort((a, b) => b.objetivo - a.objetivo)
-          .slice(0, 12)
-      : [];
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        {DIMS.map((d) => (
-          <button key={d.k} onClick={() => setDim(d.k)} className={cn('rounded-full px-3 py-1 text-xs font-medium transition-colors', dim === d.k ? 'bg-gradient-to-br from-purple-500 to-fuchsia-500 text-white shadow' : 'bg-purple-500/10 text-purple-700 hover:bg-purple-500/20 dark:text-purple-200')}>
-            {d.label}
-          </button>
-        ))}
-      </div>
-
-      {error ? (
-        <p className="text-sm text-rose-500">No se pudo cargar.</p>
-      ) : !data ? (
-        <div className="flex h-48 items-center justify-center"><Spinner size="lg" /></div>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-            <StatCard titulo={`Total ${metric === 'monto' ? '($)' : '(caras)'}`} valor={fmt(total)} sub={`en ${data.length} ${DIMS.find((d) => d.k === dim)?.label.toLowerCase()}`} />
-            <StatCard titulo="Líder" valor={top[0]?.nombre ?? '—'} tono="up" sub={top[0] ? fmt(top[0].valor) : ''} />
-            <StatCard titulo="Concentración top 3" valor={total ? `${Math.round((top.slice(0, 3).reduce((a, d) => a + d.valor, 0) / total) * 100)}%` : '—'} sub="del total" />
-          </div>
-
-          <div className={CARD}>
-            <h3 className="mb-2 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">
-              {metric === 'monto' ? 'Monto' : 'Caras'} por {DIMS.find((d) => d.k === dim)?.label} (top 12)
-            </h3>
-            <ResponsiveContainer width="100%" height={Math.max(240, top.length * 32)}>
-              <BarChart data={top} layout="vertical" margin={{ top: 4, right: metric === 'monto' ? 70 : 50, left: 8, bottom: 4 }}>
-                <CartesianGrid stroke={ink.grid} horizontal={false} />
-                <XAxis type="number" tickFormatter={(v) => (metric === 'monto' ? fmtM(Number(v)) : nf(Number(v)))} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
-                <YAxis type="category" dataKey="corto" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={150} />
-                <Tooltip cursor={{ fill: ink.cursor }} content={<TooltipChart format={(v) => fmt(v)} />} />
-                <Bar dataKey="valor" fill="#8b5cf6" radius={[0, 4, 4, 0]} maxBarSize={20}>
-                  <LabelList dataKey="valor" position="right" formatter={(v: unknown) => (metric === 'monto' ? fmtM(Number(v)) : nf(Number(v)))} fill={ink.label} fontSize={10} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {dim === 'asesor' && (
-            <div className={CARD}>
-              <h3 className="mb-2 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">Objetivo vs. real por asesor</h3>
-              {ovr.length ? (
-                <>
-                  <ResponsiveContainer width="100%" height={Math.max(240, ovr.length * 36)}>
-                    <BarChart data={ovr} layout="vertical" margin={{ top: 4, right: 60, left: 8, bottom: 4 }}>
-                      <CartesianGrid stroke={ink.grid} horizontal={false} />
-                      <XAxis type="number" tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
-                      <YAxis type="category" dataKey="corto" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={140} />
-                      <Tooltip cursor={{ fill: ink.cursor }} content={<TooltipChart format={(v) => formatCurrency(v)} />} />
-                      <Bar dataKey="objetivo" name="Objetivo" fill="#8b5cf6" opacity={0.35} radius={[0, 3, 3, 0]} maxBarSize={9} />
-                      <Bar dataKey="real" name="Real" fill="#8b5cf6" radius={[0, 3, 3, 0]} maxBarSize={9} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                  <p className="mt-1 text-center text-[11px] text-zinc-400">Barra clara = objetivo · barra sólida = real</p>
-                </>
-              ) : (
-                <p className="py-6 text-center text-xs text-zinc-400">Captura objetivos por asesor en <b>Objetivos → Paso 2</b> para comparar aquí.</p>
-              )}
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-// ============ CAMPAÑAS (detalle) ============
+// ============================================================
+//  helpers compartidos
+// ============================================================
 function badgeStatus(s: string | null): string {
   const x = (s ?? '').toLowerCase();
   if (/final/.test(x)) return 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300';
   if (/rechaz|cancel/.test(x)) return 'bg-rose-500/15 text-rose-700 dark:text-rose-300';
   if (/aprob|iniciar/.test(x)) return 'bg-purple-500/15 text-purple-700 dark:text-purple-300';
   return 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400';
-}
-
-function CampaniasView() {
-  const [rows, setRows] = useState<CampaniaDetalle[] | null>(null);
-  const [error, setError] = useState(false);
-  const [q, setQ] = useState('');
-  useEffect(() => {
-    getCampanias(100).then(setRows).catch(() => setError(true));
-  }, []);
-  if (error) return <p className="text-sm text-rose-500">No se pudo cargar campañas.</p>;
-  if (!rows) return <div className="flex h-48 items-center justify-center"><Spinner size="lg" /></div>;
-
-  const fil = rows.filter((c) => !q || `${c.nombre} ${c.cliente ?? ''} ${c.asesor ?? ''}`.toLowerCase().includes(q.toLowerCase()));
-  const fmtF = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }) : '—');
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard titulo="Campañas (recientes)" valor={nf(rows.length)} />
-        <StatCard titulo="Inversión (recientes)" valor={formatCurrency(rows.reduce((a, c) => a + c.monto, 0))} tono="up" />
-        <StatCard titulo="Activas / por iniciar" valor={nf(rows.filter((c) => /aprob|iniciar/i.test(c.status ?? '')).length)} />
-        <StatCard titulo="Finalizadas" valor={nf(rows.filter((c) => /final/i.test(c.status ?? '')).length)} />
-      </div>
-      <div className={CARD}>
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">Detalle de campañas (recientes)</h3>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar campaña, cliente, asesor…" className="w-60 rounded-full border border-purple-200/60 bg-white/70 px-3 py-1 text-xs outline-none dark:border-purple-900/40 dark:bg-[#1a1025]/70 dark:text-zinc-200" />
-        </div>
-        <div className="max-h-[560px] overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-white/90 dark:bg-[#1a1025]/90">
-              <tr className="text-left text-xs text-zinc-400">
-                <th className="py-1 pr-2">Campaña</th>
-                <th className="py-1 pr-2">Cliente</th>
-                <th className="py-1 pr-2">Asesor</th>
-                <th className="py-1 pr-2">Inversión</th>
-                <th className="py-1 pr-2">Caras</th>
-                <th className="py-1 pr-2">Vigencia</th>
-                <th className="py-1">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {fil.map((c) => (
-                <tr key={c.id} className="border-t border-purple-100/40 dark:border-purple-900/20">
-                  <td className="py-1.5 pr-2 font-medium text-zinc-700 dark:text-zinc-200">{c.nombre?.trim()}</td>
-                  <td className="max-w-[180px] truncate py-1.5 pr-2 text-zinc-500 dark:text-zinc-400">{c.cliente ?? '—'}</td>
-                  <td className="py-1.5 pr-2 text-zinc-500 dark:text-zinc-400">{c.asesor ?? '—'}</td>
-                  <td className="py-1.5 pr-2 tabular-nums font-medium text-zinc-700 dark:text-zinc-200">{formatCurrency(c.monto)}</td>
-                  <td className="py-1.5 pr-2 tabular-nums text-zinc-500 dark:text-zinc-400">{nf(c.totalCaras)}</td>
-                  <td className="py-1.5 pr-2 text-xs text-zinc-500">{fmtF(c.fechaInicio)} – {fmtF(c.fechaFin)}</td>
-                  <td className="py-1.5"><span className={cn('rounded px-1.5 py-0.5 text-[11px] font-medium', badgeStatus(c.status))}>{c.status ?? '—'}</span></td>
-                </tr>
-              ))}
-              {!fil.length && <tr><td colSpan={7} className="py-6 text-center text-xs text-zinc-400">Sin resultados</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ============ página ============
-type Sub = 'objetivos' | 'distribucion' | 'embudo' | 'impacto' | 'campanias';
-
-export function ReportesPage() {
-  const [sub, setSub] = useState<Sub>('objetivos');
-  const tabs: { k: Sub; label: string; Icon: typeof Target }[] = [
-    { k: 'objetivos', label: 'Objetivos', Icon: Target },
-    { k: 'distribucion', label: 'Distribución', Icon: PieChart },
-    { k: 'embudo', label: 'Embudo', Icon: Filter },
-    { k: 'impacto', label: 'Impacto en inversión', Icon: TrendingUp },
-    { k: 'campanias', label: 'Campañas', Icon: ClipboardList },
-  ];
-
-  return (
-    <div className="min-w-0 flex-1">
-      <div className="mb-4">
-        <h1 className="text-lg font-light tracking-wide text-purple-700 dark:text-purple-200">Reportes de Ventas</h1>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">Objetivos, embudo de conversión y variaciones — con datos reales de QEB.</p>
-      </div>
-
-      <div className="mb-4 flex flex-wrap gap-2">
-        {tabs.map((t) => (
-          <button
-            key={t.k}
-            onClick={() => setSub(t.k)}
-            className={cn(
-              'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
-              sub === t.k ? 'bg-gradient-to-br from-purple-500 to-fuchsia-500 text-white shadow' : 'bg-purple-500/10 text-purple-700 hover:bg-purple-500/20 dark:text-purple-200'
-            )}
-          >
-            <t.Icon className="h-3.5 w-3.5" /> {t.label}
-          </button>
-        ))}
-      </div>
-
-      {sub === 'objetivos' && <ObjetivosView />}
-      {sub === 'distribucion' && <DistribucionView />}
-      {sub === 'embudo' && <EmbudoView />}
-      {sub === 'impacto' && <ImpactoView />}
-      {sub === 'campanias' && <CampaniasView />}
-    </div>
-  );
 }
