@@ -357,6 +357,18 @@ export function EmbudoPage() {
   );
 }
 
+function FiltroGrupo({ opciones, valor, onSel }: { opciones: [string, string][]; valor: string; onSel: (v: string) => void }) {
+  return (
+    <div className="flex gap-1 rounded-full bg-purple-500/10 p-0.5">
+      {opciones.map(([v, label]) => (
+        <button key={v} onClick={() => onSel(v)} className={cn('rounded-full px-3 py-0.5 text-xs font-medium', valor === v ? 'bg-white text-purple-700 shadow dark:bg-[#241633] dark:text-purple-200' : 'text-zinc-500')}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ============================================================
 //  VARIACIONES E IMPACTO
 // ============================================================
@@ -364,6 +376,8 @@ export function VariacionesPage() {
   const [imp, setImp] = useState<Impacto | null>(null);
   const [error, setError] = useState(false);
   const [campoFiltro, setCampoFiltro] = useState<'todos' | 'caras' | 'monto'>('todos');
+  const [direccion, setDireccion] = useState<'todas' | 'alzas' | 'bajas'>('todas');
+  const [entidad, setEntidad] = useState<'todos' | 'Solicitud' | 'Propuesta' | 'Campaña'>('todos');
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const ink = chartInk(isDark);
 
@@ -373,33 +387,55 @@ export function VariacionesPage() {
   if (error) return <p className="text-sm text-rose-500">No se pudo cargar el impacto.</p>;
   if (!imp) return <div className="flex h-64 items-center justify-center"><Spinner size="lg" /></div>;
 
-  const alzas = imp.ediciones.filter((e) => (e.monto ?? 0) > 0);
-  const bajas = imp.ediciones.filter((e) => (e.monto ?? 0) < 0);
-  const sumAlzas = alzas.reduce((a, e) => a + (e.monto ?? 0), 0);
-  const sumBajas = bajas.reduce((a, e) => a + (e.monto ?? 0), 0);
-  const campaniasEditadas = new Set(imp.ediciones.map((e) => e.campania ?? e.refId)).size;
+  const entidadDe = (t: string) => {
+    const s = (t || '').toLowerCase();
+    return s.includes('campañ') || s.includes('campan') ? 'Campaña' : s.includes('propuesta') ? 'Propuesta' : s.includes('solicitud') ? 'Solicitud' : 'Otro';
+  };
+  const signo = (e: Impacto['ediciones'][number]) => ((e.monto ?? 0) !== 0 ? (e.monto ?? 0) : e.caras);
 
-  const kpis = [
-    { titulo: 'Ediciones registradas', valor: nf(imp.count), sub: `${campaniasEditadas} campañas afectadas`, tono: 'neutral' as const, accent: ACCENTS[0] },
-    { titulo: 'Variación neta', valor: `${imp.total >= 0 ? '+' : ''}${formatCurrency(imp.total)}`, sub: 'Impacto total en inversión', tono: imp.total >= 0 ? 'up' as const : 'down' as const, accent: ACCENTS[1] },
-    { titulo: 'Impacto promedio', valor: `${imp.promedio >= 0 ? '+' : ''}${formatCurrency(imp.promedio)}`, sub: 'Magnitud por edición', tono: imp.promedio >= 0 ? 'up' as const : 'down' as const, accent: ACCENTS[2] },
-    { titulo: 'Alzas', valor: `+${formatCurrency(sumAlzas)}`, sub: `${alzas.length} ediciones al alza`, tono: 'up' as const, accent: ACCENTS[3] },
-    { titulo: 'Bajas', valor: formatCurrency(sumBajas), sub: `${bajas.length} ediciones a la baja`, tono: 'down' as const, accent: ACCENTS[4] },
-    { titulo: 'Mayor impacto', valor: imp.mayor ? formatCurrency(imp.mayor.monto ?? 0) : '—', sub: imp.mayor?.campania ?? imp.mayor?.usuario ?? '', tono: (imp.mayor?.monto ?? 0) >= 0 ? 'up' as const : 'down' as const, accent: ACCENTS[5] },
-  ];
-
-  const puntos = imp.puntos.map((p) => ({ x: new Date(p.fecha).getTime(), monto: p.monto }));
-  const filas = imp.ediciones.filter((e) => {
-    if (campoFiltro === 'caras') return e.carasAntes != null;
-    if (campoFiltro === 'monto') return e.invAntes != null || (e.monto ?? 0) !== 0;
+  // Filtros del jefe: dirección (alzas/bajas), campo (caras/tarifa) y entidad.
+  const fil = imp.ediciones.filter((e) => {
+    if (campoFiltro === 'caras' && e.carasAntes == null) return false;
+    if (campoFiltro === 'monto' && !(e.invAntes != null || (e.monto ?? 0) !== 0)) return false;
+    if (entidad !== 'todos' && entidadDe(e.tipo) !== entidad) return false;
+    const s = signo(e);
+    if (direccion === 'alzas' && s <= 0) return false;
+    if (direccion === 'bajas' && s >= 0) return false;
     return true;
   });
+
+  const alzas = fil.filter((e) => (e.monto ?? 0) > 0);
+  const bajas = fil.filter((e) => (e.monto ?? 0) < 0);
+  const sumAlzas = alzas.reduce((a, e) => a + (e.monto ?? 0), 0);
+  const sumBajas = bajas.reduce((a, e) => a + (e.monto ?? 0), 0);
+  const total = fil.reduce((a, e) => a + (e.monto ?? 0), 0);
+  const promedio = fil.length ? total / fil.length : 0;
+  const mayor = fil.reduce<Impacto['ediciones'][number] | null>((m, e) => (Math.abs(e.monto ?? 0) > Math.abs(m?.monto ?? 0) ? e : m), null);
+  const campaniasEditadas = new Set(fil.map((e) => e.campania ?? e.refId)).size;
+
+  const kpis = [
+    { titulo: 'Ediciones registradas', valor: nf(fil.length), sub: `${campaniasEditadas} campañas afectadas`, tono: 'neutral' as const, accent: ACCENTS[0] },
+    { titulo: 'Variación neta', valor: `${total >= 0 ? '+' : ''}${formatCurrency(total)}`, sub: 'Impacto total en inversión', tono: total >= 0 ? 'up' as const : 'down' as const, accent: ACCENTS[1] },
+    { titulo: 'Impacto promedio', valor: `${promedio >= 0 ? '+' : ''}${formatCurrency(promedio)}`, sub: 'Magnitud por edición', tono: promedio >= 0 ? 'up' as const : 'down' as const, accent: ACCENTS[2] },
+    { titulo: 'Alzas', valor: `+${formatCurrency(sumAlzas)}`, sub: `${alzas.length} ediciones al alza`, tono: 'up' as const, accent: ACCENTS[3] },
+    { titulo: 'Bajas', valor: formatCurrency(sumBajas), sub: `${bajas.length} ediciones a la baja`, tono: 'down' as const, accent: ACCENTS[4] },
+    { titulo: 'Mayor impacto', valor: mayor ? formatCurrency(mayor.monto ?? 0) : '—', sub: mayor?.campania ?? mayor?.usuario ?? '', tono: (mayor?.monto ?? 0) >= 0 ? 'up' as const : 'down' as const, accent: ACCENTS[5] },
+  ];
+
+  const puntos = fil.map((e) => ({ x: new Date(e.fecha).getTime(), monto: e.monto ?? 0 }));
+  const filas = fil;
 
   return (
     <div className="space-y-4">
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
         Cada registro proviene del historial de acciones: una edición de caras o tarifa que modificó la inversión de una campaña ya creada (venta cerrada).
       </p>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <FiltroGrupo opciones={[['todas', 'Todas'], ['alzas', 'Alzas'], ['bajas', 'Bajas']]} valor={direccion} onSel={(v) => setDireccion(v as typeof direccion)} />
+        <FiltroGrupo opciones={[['todos', 'Todos'], ['caras', 'Caras'], ['monto', 'Tarifa']]} valor={campoFiltro} onSel={(v) => setCampoFiltro(v as typeof campoFiltro)} />
+        <FiltroGrupo opciones={[['todos', 'Todos'], ['Solicitud', 'Solicitud'], ['Propuesta', 'Propuesta'], ['Campaña', 'Campaña']]} valor={entidad} onSel={(v) => setEntidad(v as typeof entidad)} />
+      </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
         {kpis.map((k) => (
@@ -423,18 +459,9 @@ export function VariacionesPage() {
       </div>
 
       <div className={CARD}>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <CardTitle>Historial de ediciones</CardTitle>
-            <p className="-mt-1 text-[11px] text-zinc-400">Audit log con campaña, quién editó y el impacto en inversión</p>
-          </div>
-          <div className="flex gap-1 rounded-full bg-purple-500/10 p-0.5">
-            {(['todos', 'caras', 'monto'] as const).map((c) => (
-              <button key={c} onClick={() => setCampoFiltro(c)} className={cn('rounded-full px-3 py-0.5 text-xs font-medium capitalize', campoFiltro === c ? 'bg-white text-purple-700 shadow dark:bg-[#241633] dark:text-purple-200' : 'text-zinc-500')}>
-                {c === 'monto' ? 'Tarifa' : c}
-              </button>
-            ))}
-          </div>
+        <div className="mb-3">
+          <CardTitle>Historial de ediciones</CardTitle>
+          <p className="-mt-1 text-[11px] text-zinc-400">Audit log con campaña, quién editó y el impacto en inversión · {filas.length} registros</p>
         </div>
         <div className="max-h-[460px] overflow-auto">
           <table className="w-full text-sm">
