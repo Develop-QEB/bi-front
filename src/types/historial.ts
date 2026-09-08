@@ -32,6 +32,12 @@ export interface EventoHistorial {
   invAntes: number | null;
   invDespues: number | null;
   descripcion: string;
+  // Atributos de la campaña (solo en /reportes/impacto, para los filtros del jefe).
+  cliente?: string | null;
+  asesor?: string | null;
+  plazas?: string[];
+  formatos?: string[];
+  muebles?: string[];
 }
 
 export interface FiltrosHistorial {

@@ -34,8 +34,9 @@ export function getContexto(refId: number): Promise<ContextoHistorial> {
 }
 
 /** Impacto en inversión (ediciones con delta de $) para el reporte de variaciones. */
-export function getImpacto(): Promise<Impacto> {
-  return getJSON<Impacto>('/reportes/impacto');
+export function getImpacto(anio?: number): Promise<Impacto> {
+  const q = anio ? `?anio=${anio}` : '';
+  return getJSON<Impacto>(`/reportes/impacto${q}`);
 }
 
 export type EstadoWS = 'conectado' | 'desconectado';

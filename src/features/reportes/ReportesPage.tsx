@@ -369,12 +369,40 @@ function FiltroGrupo({ opciones, valor, onSel }: { opciones: [string, string][];
   );
 }
 
+// Dropdown etiquetado (para la barra de filtros del jefe).
+function SelectBox({ label, valor, opciones, onSel }: { label: string; valor: string; opciones: [string, string][]; onSel: (v: string) => void }) {
+  return (
+    <label className="flex items-center gap-1.5 text-xs">
+      <span className="whitespace-nowrap text-zinc-500 dark:text-zinc-400">{label}</span>
+      <select
+        value={valor}
+        onChange={(e) => onSel(e.target.value)}
+        className="max-w-[160px] rounded-lg border border-purple-200/60 bg-white/80 px-2 py-1 text-xs text-zinc-700 shadow-sm outline-none focus:border-purple-400 dark:border-purple-900/40 dark:bg-[#241633] dark:text-zinc-200"
+      >
+        {opciones.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+      </select>
+    </label>
+  );
+}
+
+// Años seleccionables y helper "Todos" + valores para los dropdowns dinámicos.
+const ANIOS = [2026, 2025, 2024];
+const conTodos = (arr: string[]): [string, string][] => [['', 'Todos'], ...arr.map((a) => [a, a] as [string, string])];
+
 // ============================================================
 //  VARIACIONES E IMPACTO
 // ============================================================
 export function VariacionesPage() {
   const [imp, setImp] = useState<Impacto | null>(null);
   const [error, setError] = useState(false);
+  const [anio, setAnio] = useState(ANIO);
+  const [granularidad, setGranularidad] = useState<'mes' | 'anio'>('mes');
+  const [mesSel, setMesSel] = useState(0); // 0 = todos
+  const [plaza, setPlaza] = useState('');
+  const [formato, setFormato] = useState('');
+  const [mueble, setMueble] = useState('');
+  const [cliente, setCliente] = useState('');
+  const [asesor, setAsesor] = useState('');
   const [campoFiltro, setCampoFiltro] = useState<'todos' | 'caras' | 'monto'>('todos');
   const [direccion, setDireccion] = useState<'todas' | 'alzas' | 'bajas'>('todas');
   const [entidad, setEntidad] = useState<'todos' | 'Solicitud' | 'Propuesta' | 'Campaña'>('todos');
@@ -382,8 +410,23 @@ export function VariacionesPage() {
   const ink = chartInk(isDark);
 
   useEffect(() => {
-    getImpacto().then(setImp).catch(() => setError(true));
-  }, []);
+    getImpacto(anio).then(setImp).catch(() => setError(true));
+  }, [anio]);
+
+  // Opciones de los dropdowns, derivadas del universo de ediciones del año.
+  const opciones = useMemo(() => {
+    const ed = imp?.ediciones ?? [];
+    const uniq = (get: (e: Impacto['ediciones'][number]) => (string | null | undefined)[]) =>
+      [...new Set(ed.flatMap(get).filter((v): v is string => !!v && !!v.trim()))].sort((a, b) => a.localeCompare(b));
+    return {
+      plazas: uniq((e) => e.plazas ?? []),
+      formatos: uniq((e) => e.formatos ?? []),
+      muebles: uniq((e) => e.muebles ?? []),
+      clientes: uniq((e) => [e.cliente]),
+      asesores: uniq((e) => [e.asesor]),
+    };
+  }, [imp]);
+
   if (error) return <p className="text-sm text-rose-500">No se pudo cargar el impacto.</p>;
   if (!imp) return <div className="flex h-64 items-center justify-center"><Spinner size="lg" /></div>;
 
@@ -393,11 +436,23 @@ export function VariacionesPage() {
   };
   const signo = (e: Impacto['ediciones'][number]) => ((e.monto ?? 0) !== 0 ? (e.monto ?? 0) : e.caras);
 
-  // Filtros del jefe: dirección (alzas/bajas), campo (caras/tarifa) y entidad.
+  const limpiar = () => {
+    setGranularidad('mes'); setMesSel(0); setPlaza(''); setFormato(''); setMueble('');
+    setCliente(''); setAsesor(''); setCampoFiltro('todos'); setDireccion('todas'); setEntidad('todos');
+  };
+
+  // Filtros del jefe: granularidad/mes, plaza/formato/mueble/cliente/asesor
+  // (aproximado por campaña), campo editado, dirección y entidad.
   const fil = imp.ediciones.filter((e) => {
     if (campoFiltro === 'caras' && e.carasAntes == null) return false;
     if (campoFiltro === 'monto' && !(e.invAntes != null || (e.monto ?? 0) !== 0)) return false;
     if (entidad !== 'todos' && entidadDe(e.tipo) !== entidad) return false;
+    if (plaza && !(e.plazas ?? []).includes(plaza)) return false;
+    if (formato && !(e.formatos ?? []).includes(formato)) return false;
+    if (mueble && !(e.muebles ?? []).includes(mueble)) return false;
+    if (cliente && e.cliente !== cliente) return false;
+    if (asesor && e.asesor !== asesor) return false;
+    if (granularidad === 'mes' && mesSel && new Date(e.fecha).getMonth() + 1 !== mesSel) return false;
     const s = signo(e);
     if (direccion === 'alzas' && s <= 0) return false;
     if (direccion === 'bajas' && s >= 0) return false;
@@ -431,10 +486,39 @@ export function VariacionesPage() {
         Cada registro proviene del historial de acciones: una edición de caras o tarifa que modificó la inversión de una campaña ya creada (venta cerrada).
       </p>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <FiltroGrupo opciones={[['todas', 'Todas'], ['alzas', 'Alzas'], ['bajas', 'Bajas']]} valor={direccion} onSel={(v) => setDireccion(v as typeof direccion)} />
-        <FiltroGrupo opciones={[['todos', 'Todos'], ['caras', 'Caras'], ['monto', 'Tarifa']]} valor={campoFiltro} onSel={(v) => setCampoFiltro(v as typeof campoFiltro)} />
-        <FiltroGrupo opciones={[['todos', 'Todos'], ['Solicitud', 'Solicitud'], ['Propuesta', 'Propuesta'], ['Campaña', 'Campaña']]} valor={entidad} onSel={(v) => setEntidad(v as typeof entidad)} />
+      <div className={cn(CARD, 'space-y-3 !p-3')}>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <SelectBox label="Granularidad" valor={granularidad} opciones={[['mes', 'Mes'], ['anio', 'Año']]} onSel={(v) => setGranularidad(v as typeof granularidad)} />
+          <SelectBox label="Año" valor={String(anio)} opciones={ANIOS.map((a) => [String(a), String(a)])} onSel={(v) => setAnio(Number(v))} />
+          {granularidad === 'mes' && (
+            <SelectBox label="Mes" valor={String(mesSel)} opciones={[['0', 'Todos'], ...MESES.map((m, i) => [String(i + 1), m] as [string, string])]} onSel={(v) => setMesSel(Number(v))} />
+          )}
+          <SelectBox label="Plaza" valor={plaza} opciones={conTodos(opciones.plazas)} onSel={setPlaza} />
+          <SelectBox label="Formato" valor={formato} opciones={conTodos(opciones.formatos)} onSel={setFormato} />
+          <SelectBox label="Tipo de mueble" valor={mueble} opciones={conTodos(opciones.muebles)} onSel={setMueble} />
+          <SelectBox label="Cliente" valor={cliente} opciones={conTodos(opciones.clientes)} onSel={setCliente} />
+          <SelectBox label="Asesor" valor={asesor} opciones={conTodos(opciones.asesores)} onSel={setAsesor} />
+          <button onClick={limpiar} className="rounded-lg border border-purple-200/60 px-3 py-1 text-xs font-medium text-purple-700 hover:bg-purple-500/10 dark:border-purple-900/40 dark:text-purple-200">
+            Limpiar
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">Campo editado</span>
+            <FiltroGrupo opciones={[['todos', 'Todos'], ['caras', 'Caras'], ['monto', 'Tarifa']]} valor={campoFiltro} onSel={(v) => setCampoFiltro(v as typeof campoFiltro)} />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">Dirección</span>
+            <FiltroGrupo opciones={[['todas', 'Todas'], ['alzas', 'Alzas'], ['bajas', 'Bajas']]} valor={direccion} onSel={(v) => setDireccion(v as typeof direccion)} />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">Entidad</span>
+            <FiltroGrupo opciones={[['todos', 'Todos'], ['Solicitud', 'Solicitud'], ['Propuesta', 'Propuesta'], ['Campaña', 'Campaña']]} valor={entidad} onSel={(v) => setEntidad(v as typeof entidad)} />
+          </div>
+        </div>
+        <p className="text-[11px] text-zinc-400">
+          Plaza · Formato · Tipo de mueble se aproximan por campaña (el historial no guarda el atributo editado en cada registro).
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
