@@ -389,6 +389,29 @@ function SelectBox({ label, valor, opciones, onSel }: { label: string; valor: st
 const ANIOS = [2026, 2025, 2024];
 const conTodos = (arr: string[]): [string, string][] => [['', 'Todos'], ...arr.map((a) => [a, a] as [string, string])];
 
+// Barra divergente: se llena a la derecha si aumentó (verde), a la izquierda si redujo (rojo).
+function BarraDivergente({ label, valor, max }: { label: string; valor: number; max: number }) {
+  const pos = valor >= 0;
+  const w = (Math.abs(valor) / (max || 1)) * 50;
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-sm">
+        <span className="text-zinc-600 dark:text-zinc-300">{label}</span>
+        <span className={cn('font-semibold tabular-nums', pos ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
+          {pos ? '+' : ''}{formatCurrency(valor)}
+        </span>
+      </div>
+      <div className="relative h-3 overflow-hidden rounded-full bg-purple-500/10">
+        <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-zinc-400/50" />
+        <div
+          className="absolute top-0 h-full rounded-full"
+          style={{ background: pos ? '#22c55e' : '#f43f5e', left: pos ? '50%' : `${50 - w}%`, width: `${w}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ============================================================
 //  VARIACIONES E IMPACTO
 // ============================================================
@@ -490,6 +513,36 @@ export function VariacionesPage() {
     .map(([dia, delta]) => { run += delta; return { x: new Date(dia + 'T00:00:00').getTime(), delta, acum: run }; });
   const filas = fil;
 
+  // Clientes con más ajuste (variación neta absoluta).
+  const porCliente = new Map<string, { edic: number; monto: number }>();
+  for (const e of fil) {
+    const c = e.cliente ?? '—';
+    const x = porCliente.get(c) ?? { edic: 0, monto: 0 };
+    x.edic++; x.monto += e.monto ?? 0;
+    porCliente.set(c, x);
+  }
+  const clientesTop = [...porCliente.entries()]
+    .map(([nombre, v]) => ({ nombre, ...v }))
+    .sort((a, b) => Math.abs(b.monto) - Math.abs(a.monto))
+    .slice(0, 8);
+
+  // Aporte por tipo de edición: descomposición precio/volumen del delta de $.
+  // efecto caras = Δcaras × tarifa_antes ; efecto tarifa = Δinversión − efecto caras.
+  let aporteCaras = 0, aporteTarifa = 0;
+  for (const e of fil) {
+    const { carasAntes: cA, carasDespues: cD, invAntes: iA, invDespues: iD } = e;
+    if (cA != null && cD != null && iA != null && iD != null && cA > 0) {
+      const efCaras = (cD - cA) * (iA / cA);
+      aporteCaras += efCaras;
+      aporteTarifa += (iD - iA) - efCaras;
+    } else if (iA != null && iD != null) {
+      aporteTarifa += iD - iA; // sólo cambió tarifa/costo (caras iguales)
+    } else if (e.monto != null) {
+      aporteTarifa += e.monto; // fallback
+    }
+  }
+  const maxAporte = Math.max(Math.abs(aporteCaras), Math.abs(aporteTarifa), 1);
+
   return (
     <div className="space-y-4">
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
@@ -568,6 +621,48 @@ export function VariacionesPage() {
         <p className="mt-1 text-center text-[11px] text-zinc-400">
           Suma acumulada de los ajustes en el tiempo · sube cuando hay alzas, baja cuando hay bajas · la línea punteada es el cero (sin cambio neto)
         </p>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        {/* Clientes con más ajuste */}
+        <div className={CARD}>
+          <CardTitle>Clientes con más ajuste</CardTitle>
+          <p className="-mt-1 mb-2 text-[11px] text-zinc-400">Mayor variación neta absoluta</p>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[11px] uppercase tracking-wide text-zinc-400">
+                <th className="py-1 pr-2 font-medium">Cliente</th>
+                <th className="py-1 pr-2 text-center font-medium">Edic.</th>
+                <th className="py-1 text-right font-medium">Variación</th>
+              </tr>
+            </thead>
+            <tbody>
+              {clientesTop.map((c) => (
+                <tr key={c.nombre} className="border-t border-purple-100/40 dark:border-purple-900/20">
+                  <td className="max-w-[220px] truncate py-1.5 pr-2 font-medium text-zinc-700 dark:text-zinc-200">{c.nombre}</td>
+                  <td className="py-1.5 pr-2 text-center tabular-nums text-zinc-500 dark:text-zinc-400">{c.edic}</td>
+                  <td className={cn('py-1.5 text-right tabular-nums font-semibold', c.monto > 0 ? 'text-emerald-600 dark:text-emerald-400' : c.monto < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-400')}>
+                    {c.monto ? `${c.monto > 0 ? '+' : ''}${formatCurrency(c.monto)}` : '—'}
+                  </td>
+                </tr>
+              ))}
+              {!clientesTop.length && <tr><td colSpan={3} className="py-6 text-center text-xs text-zinc-400">Sin ajustes en el período</td></tr>}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Aporte por tipo de edición */}
+        <div className={CARD}>
+          <CardTitle>Aporte por tipo de edición</CardTitle>
+          <p className="-mt-1 mb-4 text-[11px] text-zinc-400">¿La variación viene de mover caras o de mover tarifa?</p>
+          <div className="space-y-4">
+            <BarraDivergente label="Cambios en número de caras" valor={aporteCaras} max={maxAporte} />
+            <BarraDivergente label="Cambios en tarifa" valor={aporteTarifa} max={maxAporte} />
+          </div>
+          <p className="mt-4 text-[11px] text-zinc-400">
+            Barra a la derecha = la edición aumentó inversión; a la izquierda = la redujo.
+          </p>
+        </div>
       </div>
 
       <div className={CARD}>
