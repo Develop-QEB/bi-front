@@ -32,7 +32,8 @@ export interface EventoHistorial {
   invAntes: number | null;
   invDespues: number | null;
   descripcion: string;
-  // Atributos de la campaña (solo en /reportes/impacto, para los filtros del jefe).
+  caraIds?: number[];
+  // Atributos EXACTOS de las caras editadas (solo en /reportes/impacto, filtros del jefe).
   cliente?: string | null;
   asesor?: string | null;
   plazas?: string[];

@@ -517,7 +517,7 @@ export function VariacionesPage() {
           </div>
         </div>
         <p className="text-[11px] text-zinc-400">
-          Plaza · Formato · Tipo de mueble se aproximan por campaña (el historial no guarda el atributo editado en cada registro).
+          Plaza · Formato · Tipo de mueble corresponden a las caras exactas que se editaron en cada registro (por circuito/cara del historial).
         </p>
       </div>
 
