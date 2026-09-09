@@ -19,14 +19,17 @@ export function TooltipChart({
   payload,
   label,
   format,
+  labelFormatter,
   hideLabel,
 }: {
   active?: boolean;
   payload?: Entry[];
   label?: string | number;
   format?: (value: number, name: string, payload: Record<string, unknown>) => string;
+  labelFormatter?: (label: string | number) => string;
   hideLabel?: boolean;
 }) {
+  const textoLabel = label != null && labelFormatter ? labelFormatter(label) : label;
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   if (!active || !payload || payload.length === 0) return null;
 
@@ -37,9 +40,9 @@ export function TooltipChart({
         isDark ? 'border-purple-500/25 bg-[#1a1025]/95 text-zinc-100' : 'border-purple-200 bg-white/95 text-zinc-800'
       )}
     >
-      {!hideLabel && label != null && label !== '' && (
+      {!hideLabel && textoLabel != null && textoLabel !== '' && (
         <p className={cn('mb-1.5 border-b pb-1 text-xs font-medium', isDark ? 'border-purple-500/20 text-purple-300' : 'border-purple-200 text-purple-700')}>
-          {label}
+          {textoLabel}
         </p>
       )}
       <ul className="flex flex-col gap-1">

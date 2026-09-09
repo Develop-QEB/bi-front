@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Line, Pie, PieChart,
-  ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis,
+  Area, Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Line, Pie, PieChart,
+  ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { Spinner } from '../../components/ui/spinner';
 import { MetricCard, ACCENTS } from '../../components/bi/MetricCard';
@@ -477,7 +477,17 @@ export function VariacionesPage() {
     { titulo: 'Mayor impacto', valor: mayor ? formatCurrency(mayor.monto ?? 0) : '—', sub: mayor?.campania ?? mayor?.usuario ?? '', tono: (mayor?.monto ?? 0) >= 0 ? 'up' as const : 'down' as const, accent: ACCENTS[5] },
   ];
 
-  const puntos = fil.map((e) => ({ x: new Date(e.fecha).getTime(), monto: e.monto ?? 0 }));
+  // Serie ACUMULADA por día: la línea sube con las alzas y baja con las bajas,
+  // así se ve de un vistazo si la inversión editada crece o cae en el tiempo.
+  const porDia = new Map<string, number>();
+  for (const e of fil) {
+    const dk = new Date(e.fecha).toISOString().slice(0, 10);
+    porDia.set(dk, (porDia.get(dk) ?? 0) + (e.monto ?? 0));
+  }
+  let run = 0;
+  const serie = [...porDia.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([dia, delta]) => { run += delta; return { x: new Date(dia + 'T00:00:00').getTime(), delta, acum: run }; });
   const filas = fil;
 
   return (
@@ -528,18 +538,36 @@ export function VariacionesPage() {
       </div>
 
       <div className={CARD}>
-        <CardTitle>Dónde se concentran los ajustes de inversión</CardTitle>
-        <ResponsiveContainer width="100%" height={240}>
-          <ScatterChart margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
-            <CartesianGrid stroke={ink.grid} />
-            <XAxis type="number" dataKey="x" name="Fecha" domain={['dataMin', 'dataMax']} tickFormatter={(v) => new Date(Number(v)).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
-            <YAxis type="number" dataKey="monto" name="Monto" tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={48} />
-            <ZAxis range={[45, 45]} />
-            <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<TooltipChart hideLabel format={(v, n) => (n === 'Monto' ? formatCurrency(v) : new Date(Number(v)).toLocaleDateString('es-MX'))} />} />
-            <Scatter data={puntos} fill="#8b5cf6" fillOpacity={0.6} />
-          </ScatterChart>
+        <CardTitle>Cómo evoluciona la variación de inversión</CardTitle>
+        <ResponsiveContainer width="100%" height={260}>
+          <ComposedChart data={serie} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+            <defs>
+              <linearGradient id="gradAcum" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.35} />
+                <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke={ink.grid} vertical={false} />
+            <XAxis
+              dataKey="x" type="number" scale="time" domain={['dataMin', 'dataMax']}
+              tickFormatter={(v) => new Date(Number(v)).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
+              tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false}
+            />
+            <YAxis tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
+            <Tooltip content={
+              <TooltipChart
+                labelFormatter={(l) => new Date(Number(l)).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                format={(v) => `${v >= 0 ? '+' : ''}${formatCurrency(v)}`}
+              />
+            } />
+            <ReferenceLine y={0} stroke={ink.axis} strokeDasharray="5 4" ifOverflow="extendDomain"
+              label={{ value: 'Sin cambio (0)', position: 'insideRight', fill: ink.axis, fontSize: 10 }} />
+            <Area type="monotone" dataKey="acum" name="Variación acumulada" stroke="#8b5cf6" strokeWidth={2.5} fill="url(#gradAcum)" dot={false} activeDot={{ r: 4 }} />
+          </ComposedChart>
         </ResponsiveContainer>
-        <p className="mt-1 text-center text-[11px] text-zinc-400">Cada punto = un ajuste de inversión · eje Y = delta en $</p>
+        <p className="mt-1 text-center text-[11px] text-zinc-400">
+          Suma acumulada de los ajustes en el tiempo · sube cuando hay alzas, baja cuando hay bajas · la línea punteada es el cero (sin cambio neto)
+        </p>
       </div>
 
       <div className={CARD}>
