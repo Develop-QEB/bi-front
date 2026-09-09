@@ -623,48 +623,6 @@ export function VariacionesPage() {
         </p>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        {/* Clientes con más ajuste */}
-        <div className={CARD}>
-          <CardTitle>Clientes con más ajuste</CardTitle>
-          <p className="-mt-1 mb-2 text-[11px] text-zinc-400">Mayor variación neta absoluta</p>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wide text-zinc-400">
-                <th className="py-1 pr-2 font-medium">Cliente</th>
-                <th className="py-1 pr-2 text-center font-medium">Edic.</th>
-                <th className="py-1 text-right font-medium">Variación</th>
-              </tr>
-            </thead>
-            <tbody>
-              {clientesTop.map((c) => (
-                <tr key={c.nombre} className="border-t border-purple-100/40 dark:border-purple-900/20">
-                  <td className="max-w-[220px] truncate py-1.5 pr-2 font-medium text-zinc-700 dark:text-zinc-200">{c.nombre}</td>
-                  <td className="py-1.5 pr-2 text-center tabular-nums text-zinc-500 dark:text-zinc-400">{c.edic}</td>
-                  <td className={cn('py-1.5 text-right tabular-nums font-semibold', c.monto > 0 ? 'text-emerald-600 dark:text-emerald-400' : c.monto < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-400')}>
-                    {c.monto ? `${c.monto > 0 ? '+' : ''}${formatCurrency(c.monto)}` : '—'}
-                  </td>
-                </tr>
-              ))}
-              {!clientesTop.length && <tr><td colSpan={3} className="py-6 text-center text-xs text-zinc-400">Sin ajustes en el período</td></tr>}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Aporte por tipo de edición */}
-        <div className={CARD}>
-          <CardTitle>Aporte por tipo de edición</CardTitle>
-          <p className="-mt-1 mb-4 text-[11px] text-zinc-400">¿La variación viene de mover caras o de mover tarifa?</p>
-          <div className="space-y-4">
-            <BarraDivergente label="Cambios en número de caras" valor={aporteCaras} max={maxAporte} />
-            <BarraDivergente label="Cambios en tarifa" valor={aporteTarifa} max={maxAporte} />
-          </div>
-          <p className="mt-4 text-[11px] text-zinc-400">
-            Barra a la derecha = la edición aumentó inversión; a la izquierda = la redujo.
-          </p>
-        </div>
-      </div>
-
       <div className={CARD}>
         <div className="mb-3">
           <CardTitle>Historial de ediciones</CardTitle>
@@ -722,6 +680,48 @@ export function VariacionesPage() {
               {!filas.length && <tr><td colSpan={7} className="py-6 text-center text-xs text-zinc-400">Sin ediciones en el período</td></tr>}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        {/* Clientes con más ajuste */}
+        <div className={CARD}>
+          <CardTitle>Clientes con más ajuste</CardTitle>
+          <p className="-mt-1 mb-2 text-[11px] text-zinc-400">Mayor variación neta absoluta</p>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[11px] uppercase tracking-wide text-zinc-400">
+                <th className="py-1 pr-2 font-medium">Cliente</th>
+                <th className="py-1 pr-2 text-center font-medium">Edic.</th>
+                <th className="py-1 text-right font-medium">Variación</th>
+              </tr>
+            </thead>
+            <tbody>
+              {clientesTop.map((c) => (
+                <tr key={c.nombre} className="border-t border-purple-100/40 dark:border-purple-900/20">
+                  <td className="max-w-[220px] truncate py-1.5 pr-2 font-medium text-zinc-700 dark:text-zinc-200">{c.nombre}</td>
+                  <td className="py-1.5 pr-2 text-center tabular-nums text-zinc-500 dark:text-zinc-400">{c.edic}</td>
+                  <td className={cn('py-1.5 text-right tabular-nums font-semibold', c.monto > 0 ? 'text-emerald-600 dark:text-emerald-400' : c.monto < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-400')}>
+                    {c.monto ? `${c.monto > 0 ? '+' : ''}${formatCurrency(c.monto)}` : '—'}
+                  </td>
+                </tr>
+              ))}
+              {!clientesTop.length && <tr><td colSpan={3} className="py-6 text-center text-xs text-zinc-400">Sin ajustes en el período</td></tr>}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Aporte por tipo de edición */}
+        <div className={CARD}>
+          <CardTitle>Aporte por tipo de edición</CardTitle>
+          <p className="-mt-1 mb-4 text-[11px] text-zinc-400">¿La variación viene de mover caras o de mover tarifa?</p>
+          <div className="space-y-4">
+            <BarraDivergente label="Cambios en número de caras" valor={aporteCaras} max={maxAporte} />
+            <BarraDivergente label="Cambios en tarifa" valor={aporteTarifa} max={maxAporte} />
+          </div>
+          <p className="mt-4 text-[11px] text-zinc-400">
+            Barra a la derecha = la edición aumentó inversión; a la izquierda = la redujo.
+          </p>
         </div>
       </div>
     </div>
