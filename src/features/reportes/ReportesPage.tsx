@@ -500,17 +500,19 @@ export function VariacionesPage() {
     { titulo: 'Mayor impacto', valor: mayor ? formatCurrency(mayor.monto ?? 0) : '—', sub: mayor?.campania ?? mayor?.usuario ?? '', tono: (mayor?.monto ?? 0) >= 0 ? 'up' as const : 'down' as const, accent: ACCENTS[5] },
   ];
 
-  // Serie ACUMULADA por día: la línea sube con las alzas y baja con las bajas,
-  // así se ve de un vistazo si la inversión editada crece o cae en el tiempo.
-  const porDia = new Map<string, number>();
+  // Alzas vs bajas por mes: barra verde hacia arriba (lo que subió) y roja hacia
+  // abajo (lo que bajó), con línea de cero enmedio.
+  const porMes = new Map<number, { alzas: number; bajas: number }>();
   for (const e of fil) {
-    const dk = new Date(e.fecha).toISOString().slice(0, 10);
-    porDia.set(dk, (porDia.get(dk) ?? 0) + (e.monto ?? 0));
+    const m = new Date(e.fecha).getMonth() + 1;
+    const x = porMes.get(m) ?? { alzas: 0, bajas: 0 };
+    const v = e.monto ?? 0;
+    if (v > 0) x.alzas += v; else if (v < 0) x.bajas += v;
+    porMes.set(m, x);
   }
-  let run = 0;
-  const serie = [...porDia.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([dia, delta]) => { run += delta; return { x: new Date(dia + 'T00:00:00').getTime(), delta, acum: run }; });
+  const barrasMes = [...porMes.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([m, v]) => ({ mes: MESES[m - 1], alzas: v.alzas, bajas: v.bajas }));
   const filas = fil;
 
   // Clientes con más ajuste (variación neta absoluta).
@@ -607,35 +609,22 @@ export function VariacionesPage() {
       </div>
 
       <div className={CARD}>
-        <CardTitle>Cómo evoluciona la variación de inversión</CardTitle>
-        <ResponsiveContainer width="100%" height={260}>
-          <ComposedChart data={serie} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
-            <defs>
-              <linearGradient id="gradAcum" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.35} />
-                <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} />
-              </linearGradient>
-            </defs>
+        <CardTitle>Alzas y bajas de inversión por mes</CardTitle>
+        <ResponsiveContainer width="100%" height={280}>
+          <BarChart data={barrasMes} stackOffset="sign" margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
             <CartesianGrid stroke={ink.grid} vertical={false} />
-            <XAxis
-              dataKey="x" type="number" scale="time" domain={['dataMin', 'dataMax']}
-              tickFormatter={(v) => new Date(Number(v)).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
-              tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false}
-            />
+            <XAxis dataKey="mes" tick={{ fill: ink.axis, fontSize: 11 }} tickLine={false} axisLine={false} />
             <YAxis tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
-            <Tooltip content={
-              <TooltipChart
-                labelFormatter={(l) => new Date(Number(l)).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
-                format={(v) => `${v >= 0 ? '+' : ''}${formatCurrency(v)}`}
-              />
+            <Tooltip cursor={{ fill: ink.cursor }} content={
+              <TooltipChart format={(v) => `${v >= 0 ? '+' : ''}${formatCurrency(v)}`} />
             } />
-            <ReferenceLine y={0} stroke={ink.axis} strokeDasharray="5 4" ifOverflow="extendDomain"
-              label={{ value: 'Sin cambio (0)', position: 'insideRight', fill: ink.axis, fontSize: 10 }} />
-            <Area type="monotone" dataKey="acum" name="Variación acumulada" stroke="#8b5cf6" strokeWidth={2.5} fill="url(#gradAcum)" dot={false} activeDot={{ r: 4 }} />
-          </ComposedChart>
+            <ReferenceLine y={0} stroke={ink.axis} />
+            <Bar dataKey="alzas" name="Alzas" stackId="v" fill="#22c55e" radius={[3, 3, 0, 0]} maxBarSize={46} />
+            <Bar dataKey="bajas" name="Bajas" stackId="v" fill="#f43f5e" radius={[0, 0, 3, 3]} maxBarSize={46} />
+          </BarChart>
         </ResponsiveContainer>
         <p className="mt-1 text-center text-[11px] text-zinc-400">
-          Suma acumulada de los ajustes en el tiempo · sube cuando hay alzas, baja cuando hay bajas · la línea punteada es el cero (sin cambio neto)
+          Cada mes: verde hacia arriba = ediciones que subieron la inversión · rojo hacia abajo = las que la bajaron · la línea del cero es el punto sin cambio
         </p>
       </div>
 
