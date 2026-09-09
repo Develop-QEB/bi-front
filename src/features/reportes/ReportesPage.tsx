@@ -543,6 +543,22 @@ export function VariacionesPage() {
   }
   const maxAporte = Math.max(Math.abs(aporteCaras), Math.abs(aporteTarifa), 1);
 
+  // Cómo se movió la inversión (cascada): base (Σ inversión antes) → +Δcaras → +Δtarifa → actual.
+  let invBase = 0;
+  for (const e of fil) if (e.invAntes != null) invBase += e.invAntes;
+  const invActual = invBase + aporteCaras + aporteTarifa;
+  const pctBase = (v: number) => (invBase ? (v / invBase) * 100 : 0);
+  const trayectoria = [
+    { etapa: 'Inversión base', valor: invBase },
+    { etapa: 'Tras Δ caras', valor: invBase + aporteCaras },
+    { etapa: 'Inversión actual', valor: invActual },
+  ];
+  const valsTray = trayectoria.map((t) => t.valor);
+  const vmin = Math.min(...valsTray), vmax = Math.max(...valsTray);
+  const padY = Math.max((vmax - vmin) * 0.4, Math.abs(invBase) * 0.01, 1);
+  const domY: [number, number] = [vmin - padY, vmax + padY];
+  const DOT_COLORS = ['#a855f7', '#22c55e', '#22d3ee'];
+
   return (
     <div className="space-y-4">
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
@@ -721,6 +737,49 @@ export function VariacionesPage() {
           </div>
           <p className="mt-4 text-[11px] text-zinc-400">
             Barra a la derecha = la edición aumentó inversión; a la izquierda = la redujo.
+          </p>
+        </div>
+      </div>
+
+      {/* Cómo se movió la inversión (cascada base → Δcaras → Δtarifa → actual) */}
+      <div>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-zinc-400">Análisis gráfico</p>
+        <div className={CARD}>
+          <CardTitle>Cómo se movió la inversión</CardTitle>
+          <p className="-mt-1 mb-3 text-[11px] text-zinc-400">
+            Trayectoria del monto invertido: parte de la inversión base y acumula el efecto de las ediciones de caras y tarifa hasta la inversión actual.
+          </p>
+          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <MetricCard titulo="Inversión base" valor={formatCurrency(invBase)} sub="Monto antes de las ediciones" tono="neutral" accent={ACCENTS[0]} />
+            <MetricCard titulo="Δ por caras" valor={`${aporteCaras >= 0 ? '+' : ''}${formatCurrency(aporteCaras)}`} sub={`${pctBase(aporteCaras).toFixed(1)}% del base`} tono={aporteCaras >= 0 ? 'up' : 'down'} accent={ACCENTS[1]} />
+            <MetricCard titulo="Δ por tarifa" valor={`${aporteTarifa >= 0 ? '+' : ''}${formatCurrency(aporteTarifa)}`} sub={`${pctBase(aporteTarifa).toFixed(1)}% del base`} tono={aporteTarifa >= 0 ? 'up' : 'down'} accent={ACCENTS[2]} />
+            <MetricCard titulo="Inversión actual" valor={formatCurrency(invActual)} sub={`${pctBase(invActual - invBase) >= 0 ? '+' : ''}${pctBase(invActual - invBase).toFixed(1)}% vs base`} tono={invActual >= invBase ? 'up' : 'down'} accent={ACCENTS[3]} />
+          </div>
+          <ResponsiveContainer width="100%" height={280}>
+            <ComposedChart data={trayectoria} margin={{ top: 24, right: 24, left: 8, bottom: 4 }}>
+              <defs>
+                <linearGradient id="gradTray" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke={ink.grid} vertical={false} />
+              <XAxis dataKey="etapa" tick={{ fill: ink.axis, fontSize: 11 }} tickLine={false} axisLine={false} />
+              <YAxis domain={domY} tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={58} allowDecimals={false} />
+              <Tooltip content={<TooltipChart format={(v) => formatCurrency(v)} />} />
+              <Area
+                type="linear" dataKey="valor" name="Inversión" stroke="#c4b5fd" strokeWidth={2.5} fill="url(#gradTray)"
+                dot={(p: { cx?: number; cy?: number; index?: number }) => (
+                  <circle key={p.index} cx={p.cx} cy={p.cy} r={5} fill={DOT_COLORS[(p.index ?? 0) % 3]} stroke="#fff" strokeWidth={1.5} />
+                )}
+                activeDot={{ r: 6 }}
+              >
+                <LabelList dataKey="valor" position="top" offset={12} formatter={(v: unknown) => fmtM(Number(v))} fill={ink.label} fontSize={11} fontWeight={600} />
+              </Area>
+            </ComposedChart>
+          </ResponsiveContainer>
+          <p className="mt-1 text-[11px] text-zinc-400">
+            La línea acumula el efecto de cada tipo de edición: baja con las de caras (–) y sube con las de tarifa (+), hasta llegar a la inversión actual. El eje se enfoca en la zona de cambio para que la pendiente sea visible.
           </p>
         </div>
       </div>
