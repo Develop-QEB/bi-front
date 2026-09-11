@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  Area, Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Line, Pie, PieChart,
+  Area, Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Legend, Line, Pie, PieChart,
   ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { Spinner } from '../../components/ui/spinner';
@@ -13,10 +13,10 @@ import { chartInk } from '../../lib/chartTheme';
 import { useThemeStore } from '../../store/themeStore';
 import { getAsesores, getResumenVentas } from '../../services/resumenVentas.service';
 import { getImpacto } from '../../services/historial.service';
-import { getCampanias, getCiclo, getDistribucion, getEmbudo, getVentasPeriodo } from '../../services/reportes.service';
+import { getCampanias, getCiclo, getDistribucion, getEmbudo, getOpciones, getVentasPeriodo } from '../../services/reportes.service';
 import { asesorObjetivoDe, objetivoAnual, objetivoDe, useObjetivosStore } from '../../store/objetivosStore';
 import type { ResumenVentas } from '../../types/bi';
-import type { CampaniaDetalle, Ciclo, ConteoMonto, Embudo, EtapaEmbudo, Impacto, Periodo } from '../../types/reportes';
+import type { CampaniaDetalle, Ciclo, ConteoMonto, Embudo, EtapaEmbudo, FiltrosReporte, Impacto, OpcionesReporte, Periodo } from '../../types/reportes';
 
 const ANIO = 2026;
 
@@ -130,23 +130,36 @@ export function EmbudoPage() {
   const [statusFiltro, setStatusFiltro] = useState<'todos' | 'activas' | 'finalizadas'>('todos');
   const [q, setQ] = useState('');
 
+  // Barra de filtros compartida (afecta toda la tab).
+  const [granularidad, setGranularidad] = useState<'mes' | 'anio'>('mes');
+  const [filtros, setFiltros] = useState<FiltrosReporte>({ anio: ANIO, mes: null, plaza: null, formato: null, mueble: null, cliente: null, asesor: null });
+  const [opciones, setOpciones] = useState<OpcionesReporte>({ plaza: [], formato: [], mueble: [], cliente: [], asesor: [] });
+  const setF = (k: keyof FiltrosReporte, v: string | number | null) =>
+    setFiltros((f) => ({ ...f, [k]: v === '' ? null : v }));
+  const limpiar = () => { setGranularidad('mes'); setFiltros((f) => ({ anio: f.anio, mes: null, plaza: null, formato: null, mueble: null, cliente: null, asesor: null })); };
+
+  // Opciones de los dropdowns (por año).
+  useEffect(() => { getOpciones(filtros.anio).then(setOpciones).catch(() => {}); }, [filtros.anio]);
+
+  // Datos de la tab: se recargan con cada cambio de filtros.
   useEffect(() => {
-    cargarObj(ANIO);
+    cargarObj(filtros.anio);
+    const f = filtros;
     Promise.all([
-      getEmbudo().then(setEmb),
-      getCiclo().then(setCiclo).catch(() => {}),
-      getCampanias(120).then(setCamps).catch(() => setCamps([])),
-      getDistribucion('plaza').then(setPlaza).catch(() => {}),
-      getDistribucion('digital').then(setDigital).catch(() => {}),
-      getDistribucion('mueble').then(setMueble).catch(() => {}),
-      getDistribucion('cliente').then(setCliente).catch(() => {}),
-      getDistribucion('asesor').then(setAsesor).catch(() => {}),
-      getVentasPeriodo('mes', ANIO).then((rows) => {
+      getEmbudo(f).then(setEmb),
+      getCiclo(f).then(setCiclo).catch(() => {}),
+      getCampanias(120, f).then(setCamps).catch(() => setCamps([])),
+      getDistribucion('plaza', f).then(setPlaza).catch(() => {}),
+      getDistribucion('digital', f).then(setDigital).catch(() => {}),
+      getDistribucion('mueble', f).then(setMueble).catch(() => {}),
+      getDistribucion('cliente', f).then(setCliente).catch(() => {}),
+      getDistribucion('asesor', f).then(setAsesor).catch(() => {}),
+      getVentasPeriodo('mes', f).then((rows) => {
         const map = new Map(rows.map((r) => [r.periodo, r]));
         setPorMes(MESES.map((etiqueta, i) => ({ etiqueta, monto: map.get(i + 1)?.monto ?? 0, caras: map.get(i + 1)?.caras ?? 0 })));
       }).catch(() => {}),
     ]).catch(() => setError(true));
-  }, [cargarObj]);
+  }, [filtros, cargarObj]);
 
   const montoTotal = useMemo(() => plaza.reduce((a, d) => a + d.monto, 0), [plaza]);
   const anual = objetivoAnual(objetivos, ANIO);
@@ -181,6 +194,25 @@ export function EmbudoPage() {
 
   return (
     <div className="space-y-4">
+      {/* Barra de filtros (fija al hacer scroll) — afecta toda la tab */}
+      <div className={cn(CARD, 'space-y-3 !p-3', 'sticky z-20 top-[calc(var(--bi-header-h,104px)_+_8px)]')}>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <SelectBox label="Granularidad" valor={granularidad} opciones={[['mes', 'Mes'], ['anio', 'Año']]} onSel={(v) => { setGranularidad(v as typeof granularidad); if (v === 'anio') setF('mes', null); }} />
+          <SelectBox label="Año" valor={String(filtros.anio)} opciones={ANIOS.map((a) => [String(a), String(a)])} onSel={(v) => setF('anio', Number(v))} />
+          {granularidad === 'mes' && (
+            <SelectBox label="Mes" valor={String(filtros.mes ?? 0)} opciones={[['0', 'Todos'], ...MESES.map((m, i) => [String(i + 1), m] as [string, string])]} onSel={(v) => setF('mes', Number(v) || null)} />
+          )}
+          <SelectBox label="Plaza" valor={filtros.plaza ?? ''} opciones={conTodos(opciones.plaza)} onSel={(v) => setF('plaza', v)} />
+          <SelectBox label="Formato" valor={filtros.formato ?? ''} opciones={conTodos(opciones.formato)} onSel={(v) => setF('formato', v)} />
+          <SelectBox label="Tipo de mueble" valor={filtros.mueble ?? ''} opciones={conTodos(opciones.mueble)} onSel={(v) => setF('mueble', v)} />
+          <SelectBox label="Cliente" valor={filtros.cliente ?? ''} opciones={conTodos(opciones.cliente)} onSel={(v) => setF('cliente', v)} />
+          <SelectBox label="Asesor" valor={filtros.asesor ?? ''} opciones={conTodos(opciones.asesor)} onSel={(v) => setF('asesor', v)} />
+          <button onClick={limpiar} className="rounded-lg border border-purple-200/60 px-3 py-1 text-xs font-medium text-purple-700 hover:bg-purple-500/10 dark:border-purple-900/40 dark:text-purple-200">
+            Limpiar
+          </button>
+        </div>
+      </div>
+
       {/* 6 KPI con barra de gradiente */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
         {kpis.map((k, i) => (
@@ -385,6 +417,16 @@ function SelectBox({ label, valor, opciones, onSel }: { label: string; valor: st
   );
 }
 
+// Leyenda verde/rojo para las gráficas de variación neta.
+function LeyendaPosNeg() {
+  return (
+    <div className="flex items-center gap-3 text-[11px] text-zinc-500 dark:text-zinc-400">
+      <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: '#22c55e' }} />Aumentó inversión</span>
+      <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: '#f43f5e' }} />Redujo inversión</span>
+    </div>
+  );
+}
+
 // Años seleccionables y helper "Todos" + valores para los dropdowns dinámicos.
 const ANIOS = [2026, 2025, 2024];
 const conTodos = (arr: string[]): [string, string][] => [['', 'Todos'], ...arr.map((a) => [a, a] as [string, string])];
@@ -512,7 +554,7 @@ export function VariacionesPage() {
   }
   const barrasMes = [...porMes.entries()]
     .sort((a, b) => a[0] - b[0])
-    .map(([m, v]) => ({ mes: MESES[m - 1], alzas: v.alzas, bajas: v.bajas }));
+    .map(([m, v]) => ({ mes: MESES[m - 1], alzas: v.alzas, bajas: v.bajas, neta: v.alzas + v.bajas }));
   const filas = fil;
 
   // Clientes con más ajuste (variación neta absoluta).
@@ -561,13 +603,36 @@ export function VariacionesPage() {
   const domY: [number, number] = [vmin - padY, vmax + padY];
   const DOT_COLORS = ['#a855f7', '#22c55e', '#22d3ee'];
 
+  // Variación neta por asesor (una barra por asesor, verde/rojo según signo).
+  const porAsesor = new Map<string, number>();
+  for (const e of fil) { if (!e.asesor) continue; porAsesor.set(e.asesor, (porAsesor.get(e.asesor) ?? 0) + (e.monto ?? 0)); }
+  const asesorNeto = [...porAsesor.entries()]
+    .map(([nombre, monto]) => ({ nombre, corto: nombre.split(' ')[0], monto }))
+    .filter((x) => x.monto !== 0)
+    .sort((a, b) => Math.abs(b.monto) - Math.abs(a.monto))
+    .slice(0, 10)
+    .sort((a, b) => b.monto - a.monto);
+
+  // Variación neta por plaza (el monto de una edición se reparte entre sus plazas).
+  const porPlaza = new Map<string, number>();
+  for (const e of fil) {
+    const ps = e.plazas ?? [];
+    if (!ps.length) continue;
+    const share = (e.monto ?? 0) / ps.length;
+    for (const p of ps) porPlaza.set(p, (porPlaza.get(p) ?? 0) + share);
+  }
+  const plazaNeto = [...porPlaza.entries()]
+    .map(([nombre, monto]) => ({ nombre, monto }))
+    .filter((x) => x.monto !== 0)
+    .sort((a, b) => b.monto - a.monto);
+
   return (
     <div className="space-y-4">
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
         Cada registro proviene del historial de acciones: una edición de caras o tarifa que modificó la inversión de una campaña ya creada (venta cerrada).
       </p>
 
-      <div className={cn(CARD, 'space-y-3 !p-3')}>
+      <div className={cn(CARD, 'space-y-3 !p-3', 'sticky z-20 top-[calc(var(--bi-header-h,104px)_+_8px)]')}>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <SelectBox label="Granularidad" valor={granularidad} opciones={[['mes', 'Mes'], ['anio', 'Año']]} onSel={(v) => setGranularidad(v as typeof granularidad)} />
           <SelectBox label="Año" valor={String(anio)} opciones={ANIOS.map((a) => [String(a), String(a)])} onSel={(v) => setAnio(Number(v))} />
@@ -606,26 +671,6 @@ export function VariacionesPage() {
         {kpis.map((k) => (
           <MetricCard key={k.titulo} titulo={k.titulo} valor={k.valor} sub={k.sub} tono={k.tono} accent={k.accent} />
         ))}
-      </div>
-
-      <div className={CARD}>
-        <CardTitle>Alzas y bajas de inversión por mes</CardTitle>
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={barrasMes} stackOffset="sign" margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
-            <CartesianGrid stroke={ink.grid} vertical={false} />
-            <XAxis dataKey="mes" tick={{ fill: ink.axis, fontSize: 11 }} tickLine={false} axisLine={false} />
-            <YAxis tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
-            <Tooltip cursor={{ fill: ink.cursor }} content={
-              <TooltipChart format={(v) => `${v >= 0 ? '+' : ''}${formatCurrency(v)}`} />
-            } />
-            <ReferenceLine y={0} stroke={ink.axis} />
-            <Bar dataKey="alzas" name="Alzas" stackId="v" fill="#22c55e" radius={[3, 3, 0, 0]} maxBarSize={46} />
-            <Bar dataKey="bajas" name="Bajas" stackId="v" fill="#f43f5e" radius={[0, 0, 3, 3]} maxBarSize={46} />
-          </BarChart>
-        </ResponsiveContainer>
-        <p className="mt-1 text-center text-[11px] text-zinc-400">
-          Cada mes: verde hacia arriba = ediciones que subieron la inversión · rojo hacia abajo = las que la bajaron · la línea del cero es el punto sin cambio
-        </p>
       </div>
 
       <div className={CARD}>
@@ -770,6 +815,79 @@ export function VariacionesPage() {
           <p className="mt-1 text-[11px] text-zinc-400">
             La línea acumula el efecto de cada tipo de edición: baja con las de caras (–) y sube con las de tarifa (+), hasta llegar a la inversión actual. El eje se enfoca en la zona de cambio para que la pendiente sea visible.
           </p>
+        </div>
+
+        <div className={cn(CARD, 'mt-3')}>
+          <CardTitle>Variación de inversión por mes</CardTitle>
+          <p className="-mt-1 mb-2 text-[11px] text-zinc-400">Alzas y bajas según la fecha de la edición; la línea es el efecto neto</p>
+          <ResponsiveContainer width="100%" height={300}>
+            <ComposedChart data={barrasMes} stackOffset="sign" margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+              <CartesianGrid stroke={ink.grid} vertical={false} />
+              <XAxis dataKey="mes" tick={{ fill: ink.axis, fontSize: 11 }} tickLine={false} axisLine={false} />
+              <YAxis tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
+              <Tooltip cursor={{ fill: ink.cursor }} content={
+                <TooltipChart format={(v) => `${v >= 0 ? '+' : ''}${formatCurrency(v)}`} />
+              } />
+              <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ fontSize: 11, paddingBottom: 8 }} />
+              <ReferenceLine y={0} stroke={ink.axis} />
+              <Bar dataKey="alzas" name="Alzas" stackId="v" fill="#22c55e" radius={[3, 3, 0, 0]} maxBarSize={46} />
+              <Bar dataKey="bajas" name="Bajas" stackId="v" fill="#f43f5e" radius={[0, 0, 3, 3]} maxBarSize={46} />
+              <Line type="monotone" dataKey="neta" name="Neta" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3, fill: '#f59e0b', stroke: '#f59e0b' }} activeDot={{ r: 5 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+          <p className="mt-1 text-center text-[11px] text-zinc-400">
+            Verde arriba = subió inversión · rojo abajo = bajó · la línea ámbar (Neta) es el efecto neto del mes (alzas + bajas)
+          </p>
+        </div>
+
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          {/* Variación neta por asesor */}
+          <div className={CARD}>
+            <div className="mb-2 flex items-start justify-between gap-2">
+              <div>
+                <CardTitle>Variación neta por asesor</CardTitle>
+                <p className="-mt-1 text-[11px] text-zinc-400">Quién genera más ajustes de inversión (± tras crear)</p>
+              </div>
+              <LeyendaPosNeg />
+            </div>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={asesorNeto} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
+                <CartesianGrid stroke={ink.grid} vertical={false} />
+                <XAxis dataKey="corto" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} interval={0} />
+                <YAxis tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
+                <Tooltip cursor={{ fill: ink.cursor }} content={<TooltipChart format={(v) => `${v >= 0 ? '+' : ''}${formatCurrency(v)}`} />} />
+                <ReferenceLine y={0} stroke={ink.axis} />
+                <Bar dataKey="monto" name="Variación neta" radius={[3, 3, 0, 0]} maxBarSize={46}>
+                  {asesorNeto.map((d, i) => <Cell key={i} fill={d.monto >= 0 ? '#22c55e' : '#f43f5e'} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+            {!asesorNeto.length && <p className="py-6 text-center text-xs text-zinc-400">Sin ajustes en el período</p>}
+          </div>
+
+          {/* Variación neta por plaza */}
+          <div className={CARD}>
+            <div className="mb-2 flex items-start justify-between gap-2">
+              <div>
+                <CardTitle>Variación neta por plaza</CardTitle>
+                <p className="-mt-1 text-[11px] text-zinc-400">Dónde se concentran los ajustes de inversión</p>
+              </div>
+              <LeyendaPosNeg />
+            </div>
+            <ResponsiveContainer width="100%" height={Math.max(220, plazaNeto.length * 30)}>
+              <BarChart data={plazaNeto} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
+                <CartesianGrid stroke={ink.grid} horizontal={false} />
+                <XAxis type="number" tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
+                <YAxis type="category" dataKey="nombre" width={92} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
+                <Tooltip cursor={{ fill: ink.cursor }} content={<TooltipChart format={(v) => `${v >= 0 ? '+' : ''}${formatCurrency(v)}`} />} />
+                <ReferenceLine x={0} stroke={ink.axis} />
+                <Bar dataKey="monto" name="Variación neta" radius={[0, 3, 3, 0]} maxBarSize={22}>
+                  {plazaNeto.map((d, i) => <Cell key={i} fill={d.monto >= 0 ? '#22c55e' : '#f43f5e'} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+            {!plazaNeto.length && <p className="py-6 text-center text-xs text-zinc-400">Sin ajustes en el período</p>}
+          </div>
         </div>
       </div>
     </div>
@@ -975,7 +1093,7 @@ function AvanceObjetivos() {
   useEffect(() => { getAsesores().then(setAsesores).catch(() => {}); }, []);
   useEffect(() => {
     setReal(null);
-    getVentasPeriodo(periodo, ANIO, asesorSel || null)
+    getVentasPeriodo(periodo, { anio: ANIO, asesor: asesorSel || null })
       .then((rows) => setReal(Object.fromEntries(rows.map((r) => [r.periodo, r.monto]))))
       .catch(() => setReal({}));
   }, [periodo, asesorSel]);

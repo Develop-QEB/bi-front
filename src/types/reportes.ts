@@ -23,6 +23,24 @@ export interface ConteoMonto {
 
 export type Dimension = 'plaza' | 'digital' | 'asesor' | 'cliente' | 'mueble' | 'categoria' | 'marca' | 'producto';
 
+export interface FiltrosReporte {
+  anio: number;
+  mes?: number | null;
+  plaza?: string | null;
+  formato?: string | null;
+  mueble?: string | null;
+  cliente?: string | null;
+  asesor?: string | null;
+}
+
+export interface OpcionesReporte {
+  plaza: string[];
+  formato: string[];
+  mueble: string[];
+  cliente: string[];
+  asesor: string[];
+}
+
 export type Periodo = 'mes' | 'catorcena' | 'semana';
 
 export interface ConteoPeriodo {

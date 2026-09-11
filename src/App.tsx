@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BarChart3, Filter, Target, TrendingUp } from 'lucide-react';
 import { ResumenVentasPage } from './features/resumen-ventas/ResumenVentasPage';
 import { EmbudoPage, ObjetivosPage, VariacionesPage } from './features/reportes/ReportesPage';
@@ -16,10 +16,23 @@ const TABS = [
 
 function App() {
   const [vista, setVista] = useState<Vista>('bi');
+  const headerRef = useRef<HTMLElement>(null);
+
+  // Publica la altura real del header como --bi-header-h para anclar barras sticky
+  // justo debajo (aunque el header cambie de alto al reajustar la ventana).
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const set = () => document.documentElement.style.setProperty('--bi-header-h', `${el.offsetHeight}px`);
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   return (
     <div className="bg-main-pattern min-h-svh">
-      <header className="sticky top-0 z-30 border-b border-purple-200/40 bg-white/70 backdrop-blur-xl dark:border-purple-900/30 dark:bg-[#140c1f]/70">
+      <header ref={headerRef} className="sticky top-0 z-30 border-b border-purple-200/40 bg-white/70 backdrop-blur-xl dark:border-purple-900/30 dark:bg-[#140c1f]/70">
         <div className="mx-auto max-w-[1600px] px-4 py-2.5">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
