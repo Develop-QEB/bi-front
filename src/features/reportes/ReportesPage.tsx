@@ -765,26 +765,32 @@ export function VariacionesPage() {
   // Rango de fechas de las ediciones consideradas (para "fecha base").
   const fechasFil = fil.map((e) => new Date(e.fecha).getTime()).filter((t) => Number.isFinite(t));
   const fechaBaseIni = fechasFil.length ? new Date(Math.min(...fechasFil)).toISOString() : null;
-  // Reconstrucción del VALOR del período día a día. No guardamos el total diario,
-  // pero sí las variaciones (alzas/bajas): partimos del total actual (venta
-  // acumulada real) y aplicamos los deltas hacia atrás para saber cuánto valía
-  // cada día. anchorTotal = valor "hoy"; valorInicio = valor al inicio del período.
+  // Reconstrucción del VALOR del período según la granularidad del filtro
+  // (mes/catorcena/semana). No guardamos el total por período, pero sí las
+  // variaciones (alzas/bajas): partimos del total actual (venta acumulada real)
+  // y aplicamos los deltas para saber cuánto valía en cada período y cómo se movió.
   const anchorTotal = ventaTotal != null ? ventaTotal : invActual;
   const D = total; // variación neta de las ediciones (alzas + bajas)
   const valorInicio = anchorTotal - D;
   const pctInicio = (v: number) => (valorInicio ? (v / valorInicio) * 100 : 0);
 
-  const deltaPorDia = new Map<string, number>();
+  const deltaPorBucket = new Map<number, number>();
   for (const e of fil) {
-    const d = new Date(e.fecha).toISOString().slice(0, 10);
-    deltaPorDia.set(d, (deltaPorDia.get(d) ?? 0) + (e.monto ?? 0));
+    const b = bucketDe(e);
+    if (!Number.isFinite(b) || b <= 0) continue;
+    deltaPorBucket.set(b, (deltaPorBucket.get(b) ?? 0) + (e.monto ?? 0));
   }
-  const diasOrden = [...deltaPorDia.keys()].sort();
+  const bucketsOrden = [...deltaPorBucket.keys()].sort((a, b) => a - b);
   let accVal = valorInicio;
-  const trayectoria = [
-    ...(diasOrden.length ? [{ x: new Date(diasOrden[0] + 'T00:00:00').getTime() - 86400000, total: valorInicio, delta: 0 }] : []),
-    ...diasOrden.map((d) => { accVal += deltaPorDia.get(d)!; return { x: new Date(d + 'T00:00:00').getTime(), total: accVal, delta: deltaPorDia.get(d)! }; }),
+  const trayectoria: { etiqueta: string; total: number; delta: number; pct: number | null }[] = [
+    { etiqueta: 'Inicio', total: valorInicio, delta: 0, pct: null },
   ];
+  for (const b of bucketsOrden) {
+    const d = deltaPorBucket.get(b)!;
+    const prev = accVal;
+    accVal += d;
+    trayectoria.push({ etiqueta: etiquetaBucket(b), total: accVal, delta: d, pct: prev ? (d / prev) * 100 : null });
+  }
   const tvals = trayectoria.map((t) => t.total);
   const tmin = tvals.length ? Math.min(...tvals) : 0;
   const tmax = tvals.length ? Math.max(...tvals) : 1;
@@ -1014,9 +1020,9 @@ export function VariacionesPage() {
       <div>
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-zinc-400">Análisis gráfico</p>
         <div className={CARD}>
-          <CardTitle>Cómo se movió la venta acumulada</CardTitle>
+          <CardTitle>Cómo se movió la venta acumulada por {unidad}</CardTitle>
           <p className="-mt-1 mb-3 text-[11px] text-zinc-400">
-            Cuánto valía el período cada día. No guardamos el total diario, pero las ediciones (alzas/bajas) lo mueven:
+            Cuánto valía en cada {unidad}. No guardamos el total por período, pero las ediciones (alzas/bajas) lo mueven:
             partimos del valor de hoy y aplicamos las variaciones para reconstruir la trayectoria.
           </p>
           <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -1034,26 +1040,25 @@ export function VariacionesPage() {
                 </linearGradient>
               </defs>
               <CartesianGrid stroke={ink.grid} vertical={false} />
-              <XAxis
-                dataKey="x" type="number" scale="time" domain={['dataMin', 'dataMax']}
-                tickFormatter={(v) => new Date(Number(v)).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
-                tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false}
-              />
+              <XAxis dataKey="etiqueta" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
               <YAxis domain={domY} tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
               <Tooltip content={
                 <TooltipChart
-                  labelFormatter={(l) => new Date(Number(l)).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
                   format={(v, _n, p) => {
                     const d = p && typeof p.delta === 'number' ? (p.delta as number) : 0;
-                    return `${formatCurrency(v)}${d !== 0 ? ` (${d > 0 ? '+' : ''}${formatCurrency(d)} ese día)` : ''}`;
+                    const pct = p && typeof p.pct === 'number' ? (p.pct as number) : null;
+                    if (d === 0) return formatCurrency(v);
+                    const flecha = d > 0 ? '▲ +' : '▼ ';
+                    const pctTxt = pct != null ? ` · ${flecha}${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%` : ` · ${d > 0 ? '+' : ''}`;
+                    return `${formatCurrency(v)} (${d > 0 ? '+' : ''}${formatCurrency(d)}${pctTxt})`;
                   }}
                 />
               } />
-              <Area type="monotone" dataKey="total" name="Valor del período" stroke="#8b5cf6" strokeWidth={2.5} fill="url(#gradTray)" dot={false} activeDot={{ r: 5 }} />
+              <Area type="monotone" dataKey="total" name="Venta acumulada" stroke="#8b5cf6" strokeWidth={2.5} fill="url(#gradTray)" dot={{ r: 3, fill: '#8b5cf6' }} activeDot={{ r: 5 }} />
             </ComposedChart>
           </ResponsiveContainer>
           <p className="mt-1 text-[11px] text-zinc-400">
-            La línea es el valor del período día a día: baja los días con más bajas y sube los días con más alzas, hasta el valor de hoy. El eje se enfoca en la zona de cambio para que el movimiento se note.
+            La línea es el valor acumulado por {unidad}: baja los períodos con más bajas y sube los que tienen más alzas, hasta el valor de hoy. Pasa el mouse por cada punto para ver el cambio ($ y %). El eje se enfoca en la zona de cambio para que el movimiento se note.
           </p>
         </div>
 
