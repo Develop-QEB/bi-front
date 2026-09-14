@@ -6,6 +6,8 @@ import { VentasPorSemanaChart } from '../../components/charts/VentasPorSemanaCha
 import { VentasPorCatorcenaChart } from '../../components/charts/VentasPorCatorcenaChart';
 import { VentasMensualesChart } from '../../components/charts/VentasMensualesChart';
 import { Spinner } from '../../components/ui/spinner';
+import { LiveBadge } from '../../components/ui/LiveBadge';
+import { useLiveRefresh } from '../../hooks/useLiveRefresh';
 import { getAsesores, getClientes, getResumenVentas } from '../../services/resumenVentas.service';
 import { formatDate } from '../../lib/utils';
 import { alternarMes, kpisDeSeleccion } from '../../lib/seleccion';
@@ -32,6 +34,8 @@ export function ResumenVentasPage() {
   const [datos, setDatos] = useState<ResumenVentas | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
+  const estadoWS = useLiveRefresh(() => setTick((t) => t + 1));
 
   const toggleMes = (mes: number) => setMesesSel((prev) => alternarMes(prev, mes));
   const limpiarMeses = () => setMesesSel([]);
@@ -57,7 +61,7 @@ export function ResumenVentasPage() {
     return () => {
       vivo = false;
     };
-  }, [filtros]);
+  }, [filtros, tick]);
 
   return (
     <div className="bg-main-pattern min-h-svh overflow-x-hidden p-3 sm:p-4 lg:p-6">
@@ -85,10 +89,13 @@ export function ResumenVentasPage() {
             </div>
           ) : (
             <>
-              <p className="mb-3 text-xs text-zinc-500 dark:text-zinc-400">
-                Datos actualizados el {formatDate(datos.actualizadoEn)}
-                {cargando && <span className="ml-2 opacity-60">· actualizando…</span>}
-              </p>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Datos actualizados el {formatDate(datos.actualizadoEn)}
+                  {cargando && <span className="ml-2 opacity-60">· actualizando…</span>}
+                </p>
+                <LiveBadge estado={estadoWS} />
+              </div>
 
               {(() => {
                 const partes = [

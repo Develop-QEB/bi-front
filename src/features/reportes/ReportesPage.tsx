@@ -6,6 +6,8 @@ import {
   ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { Spinner } from '../../components/ui/spinner';
+import { LiveBadge } from '../../components/ui/LiveBadge';
+import { useLiveRefresh } from '../../hooks/useLiveRefresh';
 import { MetricCard, ACCENTS } from '../../components/bi/MetricCard';
 import { TooltipChart } from '../../components/charts/TooltipChart';
 import { cn } from '../../lib/utils';
@@ -149,10 +151,13 @@ export function EmbudoPage() {
     setFiltros((f) => ({ ...f, [k]: v === '' ? null : v }));
   const limpiar = () => { setGranularidad('mes'); setFiltros((f) => ({ anio: f.anio, mes: null, plaza: null, formato: null, mueble: null, cliente: null, asesor: null })); };
 
+  const [tick, setTick] = useState(0); // re-carga en vivo con el WS
+  const estadoWS = useLiveRefresh(() => setTick((t) => t + 1));
+
   // Opciones de los dropdowns (por año).
   useEffect(() => { getOpciones(filtros.anio).then(setOpciones).catch(() => {}); }, [filtros.anio]);
 
-  // Datos de la tab: se recargan con cada cambio de filtros.
+  // Datos de la tab: se recargan con cada cambio de filtros y con eventos del WS.
   useEffect(() => {
     cargarObj(filtros.anio);
     const f = filtros;
@@ -170,7 +175,7 @@ export function EmbudoPage() {
         setPorMes(MESES.map((etiqueta, i) => ({ etiqueta, monto: map.get(i + 1)?.monto ?? 0, caras: map.get(i + 1)?.caras ?? 0 })));
       }).catch(() => {}),
     ]).catch(() => setError(true));
-  }, [filtros, cargarObj]);
+  }, [filtros, cargarObj, tick]);
 
   const montoTotal = useMemo(() => plaza.reduce((a, d) => a + d.monto, 0), [plaza]);
   const anual = objetivoAnual(objetivos, ANIO);
@@ -212,6 +217,7 @@ export function EmbudoPage() {
 
   return (
     <div className="space-y-4">
+      <div className="flex justify-end"><LiveBadge estado={estadoWS} /></div>
       {/* Barra de filtros (fija al hacer scroll; colapsable en móvil) — afecta toda la tab */}
       <BarraFiltros resumen={resumenEmbudo}>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">
@@ -560,11 +566,13 @@ export function VariacionesPage() {
   const [ventaTotal, setVentaTotal] = useState<number | null>(null);
   const [ventaPrev, setVentaPrev] = useState<number | null>(null); // período inmediato anterior (para ▲/▼)
   const [ventasPeriodo, setVentasPeriodo] = useState<Record<number, number>>({}); // venta V_APS por período (línea del chart)
+  const [tick, setTick] = useState(0); // se incrementa con cada evento del WS → re-carga en vivo
+  const estadoWS = useLiveRefresh(() => setTick((t) => t + 1));
 
   useEffect(() => {
     getImpacto(anio).then(setImp).catch(() => setError(true));
     getCatorcenas(anio).then(setCatCal).catch(() => setCatCal([]));
-  }, [anio]);
+  }, [anio, tick]);
 
   // Venta real del período (V_APS) según el alcance filtrado + comparación vs el
   // período inmediato anterior (solo cuando hay un único período seleccionado).
@@ -592,7 +600,7 @@ export function VariacionesPage() {
     getVentasPeriodo(uni as Periodo, { ...base, ...per })
       .then((rows) => setVentasPeriodo(Object.fromEntries(rows.map((r) => [r.periodo, r.monto]))))
       .catch(() => setVentasPeriodo({}));
-  }, [anio, granularidad, mesesSel, catsSel, semsSel, plaza, formato, mueble, cliente, asesor]);
+  }, [anio, granularidad, mesesSel, catsSel, semsSel, plaza, formato, mueble, cliente, asesor, tick]);
 
   // Opciones de los dropdowns, derivadas del universo de ediciones del año.
   const opciones = useMemo(() => {
@@ -807,10 +815,13 @@ export function VariacionesPage() {
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">
-        Cada registro proviene del historial de acciones: una edición de caras o tarifa que modificó la inversión de una campaña ya creada (venta cerrada).
-        Los montos se cuentan por <b>fecha en que se hizo la edición</b> (no por el periodo de venta de la campaña).
-      </p>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          Cada registro proviene del historial de acciones: una edición de caras o tarifa que modificó la inversión de una campaña ya creada (venta cerrada).
+          Los montos se cuentan por <b>fecha en que se hizo la edición</b> (no por el periodo de venta de la campaña).
+        </p>
+        <LiveBadge estado={estadoWS} />
+      </div>
 
       <BarraFiltros resumen={resumenFiltros}>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">
@@ -1277,6 +1288,8 @@ function AvanceObjetivos() {
   const [asesorSel, setAsesorSel] = useState('');
   const [asesores, setAsesores] = useState<readonly string[]>([]);
   const [real, setReal] = useState<Record<number, number> | null>(null);
+  const [tick, setTick] = useState(0);
+  const estadoWS = useLiveRefresh(() => setTick((t) => t + 1));
 
   useEffect(() => { getAsesores().then(setAsesores).catch(() => {}); }, []);
   useEffect(() => {
@@ -1284,7 +1297,7 @@ function AvanceObjetivos() {
     getVentasPeriodo(periodo, { anio: ANIO, asesor: asesorSel || null })
       .then((rows) => setReal(Object.fromEntries(rows.map((r) => [r.periodo, r.monto]))))
       .catch(() => setReal({}));
-  }, [periodo, asesorSel]);
+  }, [periodo, asesorSel, tick]);
 
   const anual = objetivoAnual(objetivos, ANIO);
   const factor = asesorSel && anual ? asesorObjetivoDe(asesoresObj, ANIO, asesorSel) / anual : 1;
@@ -1331,6 +1344,7 @@ function AvanceObjetivos() {
           <option value="">Todo el equipo</option>
           {asesores.map((a) => <option key={a} value={a}>{a}</option>)}
         </select>
+        <LiveBadge estado={estadoWS} className="ml-auto" />
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
