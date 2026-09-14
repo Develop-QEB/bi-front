@@ -765,6 +765,29 @@ export function VariacionesPage() {
       </div>
 
       <div className={CARD}>
+        <CardTitle>Variación de inversión por {unidad}</CardTitle>
+        <p className="-mt-1 mb-2 text-[11px] text-zinc-400">Alzas y bajas según la fecha de la edición; la línea es el efecto neto</p>
+        <ResponsiveContainer width="100%" height={300}>
+          <ComposedChart data={barrasMes} stackOffset="sign" margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+            <CartesianGrid stroke={ink.grid} vertical={false} />
+            <XAxis dataKey="mes" tick={{ fill: ink.axis, fontSize: 11 }} tickLine={false} axisLine={false} />
+            <YAxis tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
+            <Tooltip cursor={{ fill: ink.cursor }} content={
+              <TooltipChart format={(v) => `${v >= 0 ? '+' : ''}${formatCurrency(v)}`} />
+            } />
+            <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ fontSize: 11, paddingBottom: 8 }} />
+            <ReferenceLine y={0} stroke={ink.axis} />
+            <Bar dataKey="alzas" name="Alzas" stackId="v" fill="#22c55e" radius={[3, 3, 0, 0]} maxBarSize={46} />
+            <Bar dataKey="bajas" name="Bajas" stackId="v" fill="#f43f5e" radius={[0, 0, 3, 3]} maxBarSize={46} />
+            <Line type="monotone" dataKey="neta" name="Neta" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3, fill: '#f59e0b', stroke: '#f59e0b' }} activeDot={{ r: 5 }} />
+          </ComposedChart>
+        </ResponsiveContainer>
+        <p className="mt-1 text-center text-[11px] text-zinc-400">
+          Verde arriba = subió inversión · rojo abajo = bajó · la línea ámbar (Neta) es el efecto neto del período (alzas + bajas)
+        </p>
+      </div>
+
+      <div className={CARD}>
         <div className="mb-3">
           <CardTitle>Historial de ediciones</CardTitle>
           <p className="-mt-1 text-[11px] text-zinc-400">Audit log con campaña, quién editó y el impacto en inversión · {filas.length} registros</p>
@@ -905,29 +928,6 @@ export function VariacionesPage() {
           </ResponsiveContainer>
           <p className="mt-1 text-[11px] text-zinc-400">
             La línea acumula el efecto de cada tipo de edición: baja con las de caras (–) y sube con las de tarifa (+), hasta llegar a la inversión actual. El eje se enfoca en la zona de cambio para que la pendiente sea visible.
-          </p>
-        </div>
-
-        <div className={cn(CARD, 'mt-3')}>
-          <CardTitle>Variación de inversión por {unidad}</CardTitle>
-          <p className="-mt-1 mb-2 text-[11px] text-zinc-400">Alzas y bajas según la fecha de la edición; la línea es el efecto neto</p>
-          <ResponsiveContainer width="100%" height={300}>
-            <ComposedChart data={barrasMes} stackOffset="sign" margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
-              <CartesianGrid stroke={ink.grid} vertical={false} />
-              <XAxis dataKey="mes" tick={{ fill: ink.axis, fontSize: 11 }} tickLine={false} axisLine={false} />
-              <YAxis tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
-              <Tooltip cursor={{ fill: ink.cursor }} content={
-                <TooltipChart format={(v) => `${v >= 0 ? '+' : ''}${formatCurrency(v)}`} />
-              } />
-              <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ fontSize: 11, paddingBottom: 8 }} />
-              <ReferenceLine y={0} stroke={ink.axis} />
-              <Bar dataKey="alzas" name="Alzas" stackId="v" fill="#22c55e" radius={[3, 3, 0, 0]} maxBarSize={46} />
-              <Bar dataKey="bajas" name="Bajas" stackId="v" fill="#f43f5e" radius={[0, 0, 3, 3]} maxBarSize={46} />
-              <Line type="monotone" dataKey="neta" name="Neta" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3, fill: '#f59e0b', stroke: '#f59e0b' }} activeDot={{ r: 5 }} />
-            </ComposedChart>
-          </ResponsiveContainer>
-          <p className="mt-1 text-center text-[11px] text-zinc-400">
-            Verde arriba = subió inversión · rojo abajo = bajó · la línea ámbar (Neta) es el efecto neto del mes (alzas + bajas)
           </p>
         </div>
 
