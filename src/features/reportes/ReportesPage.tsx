@@ -869,7 +869,7 @@ export function VariacionesPage() {
             <YAxis yAxisId="var" tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
             <YAxis yAxisId="venta" orientation="right" tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
             <Tooltip cursor={{ fill: ink.cursor }} content={
-              <TooltipChart format={(v) => `${v >= 0 ? '+' : ''}${formatCurrency(v)}`} />
+              <TooltipChart format={(v, n) => (n.includes('Venta') ? formatCurrency(v) : `${v >= 0 ? '+' : ''}${formatCurrency(v)}`)} />
             } />
             <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ fontSize: 11, paddingBottom: 8 }} />
             <ReferenceLine yAxisId="var" y={0} stroke={ink.axis} />
