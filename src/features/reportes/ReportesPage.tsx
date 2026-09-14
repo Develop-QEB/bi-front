@@ -286,6 +286,7 @@ export function EmbudoPage() {
                 <th className="py-1 pr-2">Campaña</th>
                 <th className="py-1 pr-2">Cliente</th>
                 <th className="py-1 pr-2">Asesor</th>
+                <th className="py-1 pr-2">Creación</th>
                 <th className="py-1 pr-2">Vigencia</th>
                 <th className="py-1 pr-2">Caras</th>
                 <th className="py-1 pr-2 text-right">Inversión</th>
@@ -298,13 +299,14 @@ export function EmbudoPage() {
                   <td className="py-1.5 pr-2 font-medium text-zinc-700 dark:text-zinc-200">{c.nombre?.trim()}</td>
                   <td className="max-w-[160px] truncate py-1.5 pr-2 text-zinc-500 dark:text-zinc-400">{c.cliente ?? '—'}</td>
                   <td className="py-1.5 pr-2 text-zinc-500 dark:text-zinc-400">{c.asesor ?? '—'}</td>
+                  <td className="py-1.5 pr-2 text-xs text-zinc-500">{fmtF(c.fechaCreacion)}</td>
                   <td className="py-1.5 pr-2 text-xs text-zinc-500">{fmtF(c.fechaInicio)} – {fmtF(c.fechaFin)}</td>
                   <td className="py-1.5 pr-2 tabular-nums text-zinc-500 dark:text-zinc-400">{nf(c.totalCaras)}</td>
                   <td className="py-1.5 pr-2 text-right tabular-nums font-medium text-zinc-700 dark:text-zinc-200">{formatCurrency(c.monto)}</td>
                   <td className="py-1.5"><span className={cn('rounded px-1.5 py-0.5 text-[11px] font-medium', badgeStatus(c.status))}>{c.status ?? '—'}</span></td>
                 </tr>
               ))}
-              {!campsFil.length && <tr><td colSpan={7} className="py-6 text-center text-xs text-zinc-400">Sin resultados</td></tr>}
+              {!campsFil.length && <tr><td colSpan={8} className="py-6 text-center text-xs text-zinc-400">Sin resultados</td></tr>}
             </tbody>
           </table>
         </div>

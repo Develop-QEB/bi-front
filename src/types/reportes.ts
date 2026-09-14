@@ -64,6 +64,7 @@ export interface CampaniaDetalle {
   monto: number;
   fechaInicio: string | null;
   fechaFin: string | null;
+  fechaCreacion: string | null;
   cliente: string | null;
   asesor: string | null;
 }
