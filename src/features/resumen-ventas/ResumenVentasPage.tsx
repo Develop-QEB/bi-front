@@ -60,7 +60,7 @@ export function ResumenVentasPage() {
   }, [filtros]);
 
   return (
-    <div className="bg-main-pattern min-h-svh p-4 lg:p-6">
+    <div className="bg-main-pattern min-h-svh overflow-x-hidden p-3 sm:p-4 lg:p-6">
       <div className="mx-auto flex max-w-[1600px] flex-col gap-4 lg:flex-row lg:gap-6">
         <FiltersSidebar
           filtros={filtros}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { ChevronDown, SlidersHorizontal } from 'lucide-react';
 import {
   Area, Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Legend, Line, Pie, PieChart,
   ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -204,9 +205,9 @@ export function EmbudoPage() {
 
   return (
     <div className="space-y-4">
-      {/* Barra de filtros (fija al hacer scroll) — afecta toda la tab */}
-      <div className={cn(CARD, 'space-y-3 !p-3', 'sticky z-20 top-[calc(var(--bi-header-h,104px)_+_8px)]')}>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      {/* Barra de filtros (fija al hacer scroll en desktop; colapsable en móvil) — afecta toda la tab */}
+      <BarraFiltros>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">
           <SelectBox label="Granularidad" valor={granularidad} opciones={[['mes', 'Mes'], ['anio', 'Año']]} onSel={(v) => { setGranularidad(v as typeof granularidad); if (v === 'anio') setF('mes', null); }} />
           <SelectBox label="Año" valor={String(filtros.anio)} opciones={ANIOS.map((a) => [String(a), String(a)])} onSel={(v) => setF('anio', Number(v))} />
           {granularidad === 'mes' && (
@@ -217,11 +218,11 @@ export function EmbudoPage() {
           <SelectBox label="Tipo de mueble" valor={filtros.mueble ?? ''} opciones={conTodos(opciones.mueble)} onSel={(v) => setF('mueble', v)} />
           <SelectBox label="Cliente" valor={filtros.cliente ?? ''} opciones={conTodos(opciones.cliente)} onSel={(v) => setF('cliente', v)} />
           <SelectBox label="Asesor" valor={filtros.asesor ?? ''} opciones={conTodos(opciones.asesor)} onSel={(v) => setF('asesor', v)} />
-          <button onClick={limpiar} className="rounded-lg border border-purple-200/60 px-3 py-1 text-xs font-medium text-purple-700 hover:bg-purple-500/10 dark:border-purple-900/40 dark:text-purple-200">
+          <button onClick={limpiar} className="rounded-lg border border-purple-200/60 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-500/10 dark:border-purple-900/40 dark:text-purple-200">
             Limpiar
           </button>
         </div>
-      </div>
+      </BarraFiltros>
 
       {/* 6 KPI con barra de gradiente */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
@@ -281,7 +282,7 @@ export function EmbudoPage() {
           </div>
         </div>
         <div className="max-h-[420px] overflow-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[760px] text-sm">
             <thead className="sticky top-0 bg-white/90 dark:bg-[#1a1025]/90">
               <tr className="text-left text-xs text-zinc-400">
                 <th className="py-1 pr-2">Campaña</th>
@@ -416,12 +417,12 @@ function FiltroGrupo({ opciones, valor, onSel }: { opciones: [string, string][];
 // Dropdown etiquetado (para la barra de filtros del jefe).
 function SelectBox({ label, valor, opciones, onSel }: { label: string; valor: string; opciones: [string, string][]; onSel: (v: string) => void }) {
   return (
-    <label className="flex items-center gap-1.5 text-xs">
-      <span className="whitespace-nowrap text-zinc-500 dark:text-zinc-400">{label}</span>
+    <label className="flex w-full items-center gap-1.5 text-xs sm:w-auto">
+      <span className="w-24 shrink-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400 sm:w-auto">{label}</span>
       <select
         value={valor}
         onChange={(e) => onSel(e.target.value)}
-        className="max-w-[160px] rounded-lg border border-purple-200/60 bg-white/80 px-2 py-1 text-xs text-zinc-700 shadow-sm outline-none focus:border-purple-400 dark:border-purple-900/40 dark:bg-[#241633] dark:text-zinc-200"
+        className="min-w-0 flex-1 rounded-lg border border-purple-200/60 bg-white/80 px-2 py-1.5 text-xs text-zinc-700 shadow-sm outline-none focus:border-purple-400 dark:border-purple-900/40 dark:bg-[#241633] dark:text-zinc-200 sm:max-w-[160px] sm:flex-none sm:py-1"
       >
         {opciones.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </select>
@@ -442,6 +443,26 @@ function LeyendaPosNeg() {
 // Años seleccionables y helper "Todos" + valores para los dropdowns dinámicos.
 const ANIOS = [2026, 2025, 2024];
 const conTodos = (arr: string[]): [string, string][] => [['', 'Todos'], ...arr.map((a) => [a, a] as [string, string])];
+
+// Contenedor de la barra de filtros: sticky en desktop; colapsable en móvil
+// (para que muchos controles no tapen la pantalla). En sm+ siempre visible.
+function BarraFiltros({ children }: { children: ReactNode }) {
+  const [abierto, setAbierto] = useState(false);
+  return (
+    <div className={cn(CARD, '!p-3', 'sm:sticky sm:z-20 sm:top-[calc(var(--bi-header-h,104px)_+_8px)]')}>
+      <button
+        onClick={() => setAbierto((v) => !v)}
+        className="flex w-full items-center justify-between text-xs font-medium text-purple-700 dark:text-purple-200 sm:hidden"
+      >
+        <span className="flex items-center gap-1.5"><SlidersHorizontal className="h-4 w-4" /> Filtros</span>
+        <ChevronDown className={cn('h-4 w-4 transition-transform', abierto && 'rotate-180')} />
+      </button>
+      <div className={cn('space-y-3', abierto ? 'mt-3 sm:mt-0' : 'hidden sm:block')}>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 // Barra divergente: se llena a la derecha si aumentó (verde), a la izquierda si redujo (rojo).
 function BarraDivergente({ label, valor, max }: { label: string; valor: number; max: number }) {
@@ -696,8 +717,8 @@ export function VariacionesPage() {
         Los montos se cuentan por <b>fecha en que se hizo la edición</b> (no por el periodo de venta de la campaña).
       </p>
 
-      <div className={cn(CARD, 'space-y-3 !p-3', 'sticky z-20 top-[calc(var(--bi-header-h,104px)_+_8px)]')}>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <BarraFiltros>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">
           <SelectBox label="Granularidad" valor={granularidad} opciones={[['mes', 'Mes'], ['catorcena', 'Catorcena'], ['semana', 'Semana'], ['anio', 'Año']]} onSel={(v) => setGranularidad(v as typeof granularidad)} />
           <SelectBox label="Año" valor={String(anio)} opciones={ANIOS.map((a) => [String(a), String(a)])} onSel={(v) => setAnio(Number(v))} />
           {granularidad === 'mes' && (
@@ -714,20 +735,20 @@ export function VariacionesPage() {
           <SelectBox label="Tipo de mueble" valor={mueble} opciones={conTodos(opciones.muebles)} onSel={setMueble} />
           <SelectBox label="Cliente" valor={cliente} opciones={conTodos(opciones.clientes)} onSel={setCliente} />
           <SelectBox label="Asesor" valor={asesor} opciones={conTodos(opciones.asesores)} onSel={setAsesor} />
-          <button onClick={limpiar} className="rounded-lg border border-purple-200/60 px-3 py-1 text-xs font-medium text-purple-700 hover:bg-purple-500/10 dark:border-purple-900/40 dark:text-purple-200">
+          <button onClick={limpiar} className="rounded-lg border border-purple-200/60 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-500/10 dark:border-purple-900/40 dark:text-purple-200">
             Limpiar
           </button>
         </div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <div className="flex items-center gap-1.5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-zinc-500 dark:text-zinc-400">Campo editado</span>
             <FiltroGrupo opciones={[['todos', 'Todos'], ['caras', 'Caras'], ['monto', 'Tarifa']]} valor={campoFiltro} onSel={(v) => setCampoFiltro(v as typeof campoFiltro)} />
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-zinc-500 dark:text-zinc-400">Dirección</span>
             <FiltroGrupo opciones={[['todas', 'Todas'], ['alzas', 'Alzas'], ['bajas', 'Bajas']]} valor={direccion} onSel={(v) => setDireccion(v as typeof direccion)} />
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-zinc-500 dark:text-zinc-400">Entidad</span>
             <FiltroGrupo opciones={[['todos', 'Todos'], ['Solicitud', 'Solicitud'], ['Propuesta', 'Propuesta'], ['Campaña', 'Campaña']]} valor={entidad} onSel={(v) => setEntidad(v as typeof entidad)} />
           </div>
@@ -735,7 +756,7 @@ export function VariacionesPage() {
         <p className="text-[11px] text-zinc-400">
           Plaza · Formato · Tipo de mueble corresponden a las caras exactas que se editaron en cada registro (por circuito/cara del historial).
         </p>
-      </div>
+      </BarraFiltros>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
         {kpis.map((k) => (
@@ -749,7 +770,7 @@ export function VariacionesPage() {
           <p className="-mt-1 text-[11px] text-zinc-400">Audit log con campaña, quién editó y el impacto en inversión · {filas.length} registros</p>
         </div>
         <div className="max-h-[460px] overflow-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[720px] text-sm">
             <thead className="sticky top-0 bg-white/90 dark:bg-[#1a1025]/90">
               <tr className="text-left text-xs text-zinc-400">
                 <th className="py-1 pr-2">Fecha</th>
@@ -1107,8 +1128,8 @@ function DefinirObjetivos() {
             Repartido: {formatCurrency(sumAsesores)} / {formatCurrency(anual)}{anual ? ` · restante ${formatCurrency(anual - sumAsesores)}` : ''}
           </span>
         </div>
-        <div className="max-h-80 overflow-y-auto">
-          <table className="w-full text-sm">
+        <div className="max-h-80 overflow-auto">
+          <table className="w-full min-w-[440px] text-sm">
             <thead className="sticky top-0 bg-white/90 dark:bg-[#1a1025]/90">
               <tr className="text-left text-xs text-zinc-400">
                 <th className="py-1 pr-2">Asesor</th>
@@ -1243,8 +1264,8 @@ function AvanceObjetivos() {
           </div>
 
           <div className={CARD}>
-            <div className="max-h-96 overflow-y-auto">
-              <table className="w-full text-sm">
+            <div className="max-h-96 overflow-auto">
+              <table className="w-full min-w-[560px] text-sm">
                 <thead className="sticky top-0 bg-white/90 dark:bg-[#1a1025]/90">
                   <tr className="text-left text-xs text-zinc-400">
                     <th className="py-1 pr-2">Período</th>

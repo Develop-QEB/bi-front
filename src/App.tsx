@@ -31,9 +31,9 @@ function App() {
   }, []);
 
   return (
-    <div className="bg-main-pattern min-h-svh">
+    <div className="bg-main-pattern min-h-svh overflow-x-hidden">
       <header ref={headerRef} className="sticky top-0 z-30 border-b border-purple-200/40 bg-white/70 backdrop-blur-xl dark:border-purple-900/30 dark:bg-[#140c1f]/70">
-        <div className="mx-auto max-w-[1600px] px-4 py-2.5">
+        <div className="mx-auto max-w-[1600px] px-3 py-2.5 sm:px-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <img src="/imagotipo.png" alt="QEB" className="h-9 w-9 rounded-lg object-contain" />
@@ -52,19 +52,19 @@ function App() {
             </div>
           </div>
 
-          <nav className="mt-2.5 flex flex-wrap items-center gap-2">
+          <nav className="mt-2.5 -mx-3 flex items-center gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0">
             {TABS.map((t) => (
               <button
                 key={t.v}
                 onClick={() => setVista(t.v)}
                 className={cn(
-                  'flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-colors',
+                  'flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors',
                   vista === t.v
                     ? 'bg-gradient-to-br from-purple-500 to-fuchsia-500 text-white shadow'
                     : 'text-purple-700 hover:bg-purple-500/10 dark:text-purple-200'
                 )}
               >
-                <t.Icon className="h-4 w-4" />
+                <t.Icon className="h-4 w-4 shrink-0" />
                 {t.label}
               </button>
             ))}
@@ -75,7 +75,7 @@ function App() {
       {vista === 'bi' ? (
         <ResumenVentasPage />
       ) : (
-        <div className="p-4 lg:p-6">
+        <div className="p-3 sm:p-4 lg:p-6">
           <div className="mx-auto max-w-[1600px]">
             {vista === 'variaciones' && <VariacionesPage />}
             {vista === 'embudo' && <EmbudoPage />}

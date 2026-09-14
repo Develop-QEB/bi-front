@@ -59,7 +59,7 @@ export function MetricCard({
       <h3 className="text-[11px] font-medium uppercase tracking-wide text-purple-700/80 dark:text-purple-200/80">
         {titulo}
       </h3>
-      <p className={cn('mt-1.5 text-2xl font-semibold tabular-nums leading-none lg:text-[1.7rem]', TONO[tono])}>
+      <p className={cn('mt-1.5 break-words text-xl font-semibold tabular-nums leading-none sm:text-2xl lg:text-[1.7rem]', TONO[tono])}>
         {valor}
       </p>
       {sub && <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">{sub}</p>}
