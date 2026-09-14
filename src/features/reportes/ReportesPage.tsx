@@ -765,18 +765,31 @@ export function VariacionesPage() {
   // Rango de fechas de las ediciones consideradas (para "fecha base").
   const fechasFil = fil.map((e) => new Date(e.fecha).getTime()).filter((t) => Number.isFinite(t));
   const fechaBaseIni = fechasFil.length ? new Date(Math.min(...fechasFil)).toISOString() : null;
-  const fechaBaseFin = fechasFil.length ? new Date(Math.max(...fechasFil)).toISOString() : null;
-  const pctBase = (v: number) => (invBase ? (v / invBase) * 100 : 0);
+  // Reconstrucción del VALOR del período día a día. No guardamos el total diario,
+  // pero sí las variaciones (alzas/bajas): partimos del total actual (venta
+  // acumulada real) y aplicamos los deltas hacia atrás para saber cuánto valía
+  // cada día. anchorTotal = valor "hoy"; valorInicio = valor al inicio del período.
+  const anchorTotal = ventaTotal != null ? ventaTotal : invActual;
+  const D = total; // variación neta de las ediciones (alzas + bajas)
+  const valorInicio = anchorTotal - D;
+  const pctInicio = (v: number) => (valorInicio ? (v / valorInicio) * 100 : 0);
+
+  const deltaPorDia = new Map<string, number>();
+  for (const e of fil) {
+    const d = new Date(e.fecha).toISOString().slice(0, 10);
+    deltaPorDia.set(d, (deltaPorDia.get(d) ?? 0) + (e.monto ?? 0));
+  }
+  const diasOrden = [...deltaPorDia.keys()].sort();
+  let accVal = valorInicio;
   const trayectoria = [
-    { etapa: 'Inversión base', valor: invBase },
-    { etapa: 'Tras Δ caras', valor: invBase + aporteCaras },
-    { etapa: 'Inversión actual', valor: invActual },
+    ...(diasOrden.length ? [{ x: new Date(diasOrden[0] + 'T00:00:00').getTime() - 86400000, total: valorInicio, delta: 0 }] : []),
+    ...diasOrden.map((d) => { accVal += deltaPorDia.get(d)!; return { x: new Date(d + 'T00:00:00').getTime(), total: accVal, delta: deltaPorDia.get(d)! }; }),
   ];
-  const valsTray = trayectoria.map((t) => t.valor);
-  const vmin = Math.min(...valsTray), vmax = Math.max(...valsTray);
-  const padY = Math.max((vmax - vmin) * 0.4, Math.abs(invBase) * 0.01, 1);
-  const domY: [number, number] = [vmin - padY, vmax + padY];
-  const DOT_COLORS = ['#a855f7', '#22c55e', '#22d3ee'];
+  const tvals = trayectoria.map((t) => t.total);
+  const tmin = tvals.length ? Math.min(...tvals) : 0;
+  const tmax = tvals.length ? Math.max(...tvals) : 1;
+  const tpad = Math.max((tmax - tmin) * 0.3, Math.abs(anchorTotal) * 0.005, 1);
+  const domY: [number, number] = [tmin - tpad, tmax + tpad];
 
   // Variación neta por asesor (una barra por asesor, verde/rojo según signo).
   const porAsesor = new Map<string, number>();
@@ -997,22 +1010,23 @@ export function VariacionesPage() {
         </div>
       </div>
 
-      {/* Cómo se movió la inversión (cascada base → Δcaras → Δtarifa → actual) */}
+      {/* Cómo se movió la venta acumulada (valor del período reconstruido día a día) */}
       <div>
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-zinc-400">Análisis gráfico</p>
         <div className={CARD}>
-          <CardTitle>Cómo se movió la inversión</CardTitle>
+          <CardTitle>Cómo se movió la venta acumulada</CardTitle>
           <p className="-mt-1 mb-3 text-[11px] text-zinc-400">
-            Trayectoria del monto invertido: parte de la inversión base y acumula el efecto de las ediciones de caras y tarifa hasta la inversión actual.
+            Cuánto valía el período cada día. No guardamos el total diario, pero las ediciones (alzas/bajas) lo mueven:
+            partimos del valor de hoy y aplicamos las variaciones para reconstruir la trayectoria.
           </p>
           <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <MetricCard titulo="Inversión base" valor={formatCurrency(invBase)} sub={fechaBaseIni ? `Antes de las ediciones · ${fmtFecha(fechaBaseIni)} → ${fmtFecha(fechaBaseFin!)}` : 'Monto antes de las ediciones'} tono="neutral" accent={ACCENTS[0]} />
-            <MetricCard titulo="Δ por caras" valor={`${aporteCaras >= 0 ? '+' : ''}${formatCurrency(aporteCaras)}`} sub={`${pctBase(aporteCaras).toFixed(1)}% del base`} tono={aporteCaras >= 0 ? 'up' : 'down'} accent={ACCENTS[1]} />
-            <MetricCard titulo="Δ por tarifa" valor={`${aporteTarifa >= 0 ? '+' : ''}${formatCurrency(aporteTarifa)}`} sub={`${pctBase(aporteTarifa).toFixed(1)}% del base`} tono={aporteTarifa >= 0 ? 'up' : 'down'} accent={ACCENTS[2]} />
-            <MetricCard titulo="Inversión actual" valor={formatCurrency(invActual)} sub={`${pctBase(invActual - invBase) >= 0 ? '+' : ''}${pctBase(invActual - invBase).toFixed(1)}% vs base`} tono={invActual >= invBase ? 'up' : 'down'} accent={ACCENTS[3]} />
+            <MetricCard titulo="Valor al inicio" valor={formatCurrency(valorInicio)} sub={fechaBaseIni ? `${fmtFecha(fechaBaseIni)}` : 'Inicio del período'} tono="neutral" accent={ACCENTS[0]} />
+            <MetricCard titulo="Δ por caras" valor={`${aporteCaras >= 0 ? '+' : ''}${formatCurrency(aporteCaras)}`} sub={`${pctInicio(aporteCaras).toFixed(1)}% del valor inicial`} tono={aporteCaras >= 0 ? 'up' : 'down'} accent={ACCENTS[1]} />
+            <MetricCard titulo="Δ por tarifa" valor={`${aporteTarifa >= 0 ? '+' : ''}${formatCurrency(aporteTarifa)}`} sub={`${pctInicio(aporteTarifa).toFixed(1)}% del valor inicial`} tono={aporteTarifa >= 0 ? 'up' : 'down'} accent={ACCENTS[2]} />
+            <MetricCard titulo="Venta acumulada hoy" valor={formatCurrency(anchorTotal)} sub={`${pctInicio(D) >= 0 ? '▲ +' : '▼ '}${pctInicio(D).toFixed(1)}% vs inicio`} tono={D >= 0 ? 'up' : 'down'} accent={ACCENTS[3]} />
           </div>
           <ResponsiveContainer width="100%" height={280}>
-            <ComposedChart data={trayectoria} margin={{ top: 24, right: 24, left: 8, bottom: 4 }}>
+            <ComposedChart data={trayectoria} margin={{ top: 12, right: 12, left: 0, bottom: 4 }}>
               <defs>
                 <linearGradient id="gradTray" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.3} />
@@ -1020,22 +1034,26 @@ export function VariacionesPage() {
                 </linearGradient>
               </defs>
               <CartesianGrid stroke={ink.grid} vertical={false} />
-              <XAxis dataKey="etapa" tick={{ fill: ink.axis, fontSize: 11 }} tickLine={false} axisLine={false} />
-              <YAxis domain={domY} tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={58} allowDecimals={false} />
-              <Tooltip content={<TooltipChart format={(v) => formatCurrency(v)} />} />
-              <Area
-                type="linear" dataKey="valor" name="Inversión" stroke="#c4b5fd" strokeWidth={2.5} fill="url(#gradTray)"
-                dot={(p: { cx?: number; cy?: number; index?: number }) => (
-                  <circle key={p.index} cx={p.cx} cy={p.cy} r={5} fill={DOT_COLORS[(p.index ?? 0) % 3]} stroke="#fff" strokeWidth={1.5} />
-                )}
-                activeDot={{ r: 6 }}
-              >
-                <LabelList dataKey="valor" position="top" offset={12} formatter={(v: unknown) => fmtM(Number(v))} fill={ink.label} fontSize={11} fontWeight={600} />
-              </Area>
+              <XAxis
+                dataKey="x" type="number" scale="time" domain={['dataMin', 'dataMax']}
+                tickFormatter={(v) => new Date(Number(v)).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
+                tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false}
+              />
+              <YAxis domain={domY} tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
+              <Tooltip content={
+                <TooltipChart
+                  labelFormatter={(l) => new Date(Number(l)).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  format={(v, _n, p) => {
+                    const d = p && typeof p.delta === 'number' ? (p.delta as number) : 0;
+                    return `${formatCurrency(v)}${d !== 0 ? ` (${d > 0 ? '+' : ''}${formatCurrency(d)} ese día)` : ''}`;
+                  }}
+                />
+              } />
+              <Area type="monotone" dataKey="total" name="Valor del período" stroke="#8b5cf6" strokeWidth={2.5} fill="url(#gradTray)" dot={false} activeDot={{ r: 5 }} />
             </ComposedChart>
           </ResponsiveContainer>
           <p className="mt-1 text-[11px] text-zinc-400">
-            La línea acumula el efecto de cada tipo de edición: baja con las de caras (–) y sube con las de tarifa (+), hasta llegar a la inversión actual. El eje se enfoca en la zona de cambio para que la pendiente sea visible.
+            La línea es el valor del período día a día: baja los días con más bajas y sube los días con más alzas, hasta el valor de hoy. El eje se enfoca en la zona de cambio para que el movimiento se note.
           </p>
         </div>
 
