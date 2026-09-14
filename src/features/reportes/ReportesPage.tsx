@@ -13,7 +13,8 @@ import { chartInk } from '../../lib/chartTheme';
 import { useThemeStore } from '../../store/themeStore';
 import { getAsesores, getResumenVentas } from '../../services/resumenVentas.service';
 import { getImpacto } from '../../services/historial.service';
-import { getCampanias, getCiclo, getDistribucion, getEmbudo, getOpciones, getVentasPeriodo, getVentaTotal } from '../../services/reportes.service';
+import { getCampanias, getCatorcenas, getCiclo, getDistribucion, getEmbudo, getOpciones, getVentasPeriodo, getVentaTotal } from '../../services/reportes.service';
+import type { CatorcenaCal } from '../../services/reportes.service';
 import { asesorObjetivoDe, objetivoAnual, objetivoDe, useObjetivosStore } from '../../store/objetivosStore';
 import type { ResumenVentas } from '../../types/bi';
 import type { CampaniaDetalle, Ciclo, ConteoMonto, Embudo, EtapaEmbudo, FiltrosReporte, Impacto, OpcionesReporte, Periodo } from '../../types/reportes';
@@ -472,9 +473,11 @@ export function VariacionesPage() {
   const [imp, setImp] = useState<Impacto | null>(null);
   const [error, setError] = useState(false);
   const [anio, setAnio] = useState(ANIO);
-  const [granularidad, setGranularidad] = useState<'mes' | 'semana' | 'anio'>('mes');
+  const [granularidad, setGranularidad] = useState<'mes' | 'catorcena' | 'semana' | 'anio'>('mes');
   const [mesSel, setMesSel] = useState(0); // 0 = todos
   const [semSel, setSemSel] = useState(0); // 0 = todas (semana ISO)
+  const [catSel, setCatSel] = useState(0); // 0 = todas (catorcena)
+  const [catCal, setCatCal] = useState<CatorcenaCal[]>([]); // calendario de catorcenas del año
   const [plaza, setPlaza] = useState('');
   const [formato, setFormato] = useState('');
   const [mueble, setMueble] = useState('');
@@ -490,6 +493,7 @@ export function VariacionesPage() {
 
   useEffect(() => {
     getImpacto(anio).then(setImp).catch(() => setError(true));
+    getCatorcenas(anio).then(setCatCal).catch(() => setCatCal([]));
   }, [anio]);
 
   // Venta real del período (V_APS) según el alcance filtrado — KPI "Venta neta total".
@@ -529,8 +533,20 @@ export function VariacionesPage() {
   // Semanas ISO presentes en las ediciones del año (para el dropdown de Semana).
   const semanasDisp = [...new Set(imp.ediciones.map((e) => isoWeek(new Date(e.fecha))))].sort((a, b) => a - b);
 
+  // Catorcena (según el calendario QEB) a la que pertenece una fecha de edición.
+  const catDe = (fecha: string): number => {
+    const t = new Date(fecha).getTime();
+    for (const c of catCal) {
+      const ini = c.ini ? new Date(c.ini).getTime() : null;
+      const fin = c.fin ? new Date(c.fin).getTime() + 86399999 : null; // incluye el día fin
+      if (ini != null && fin != null && t >= ini && t <= fin) return c.catorcena;
+    }
+    return 0;
+  };
+  const catorcenasDisp = [...new Set(imp.ediciones.map((e) => catDe(e.fecha)).filter((c) => c > 0))].sort((a, b) => a - b);
+
   const limpiar = () => {
-    setGranularidad('mes'); setMesSel(0); setSemSel(0); setPlaza(''); setFormato(''); setMueble('');
+    setGranularidad('mes'); setMesSel(0); setSemSel(0); setCatSel(0); setPlaza(''); setFormato(''); setMueble('');
     setCliente(''); setAsesor(''); setCampoFiltro('todos'); setDireccion('todas'); setEntidad('todos');
   };
 
@@ -547,6 +563,7 @@ export function VariacionesPage() {
     if (asesor && e.asesor !== asesor) return false;
     if (granularidad === 'mes' && mesSel && new Date(e.fecha).getMonth() + 1 !== mesSel) return false;
     if (granularidad === 'semana' && semSel && isoWeek(new Date(e.fecha)) !== semSel) return false;
+    if (granularidad === 'catorcena' && catSel && catDe(e.fecha) !== catSel) return false;
     const s = signo(e);
     if (direccion === 'alzas' && s <= 0) return false;
     if (direccion === 'bajas' && s >= 0) return false;
@@ -570,12 +587,12 @@ export function VariacionesPage() {
     { titulo: 'Venta neta total', valor: ventaTotal == null ? '…' : formatCurrency(ventaTotal), sub: 'Venta real del período (V_APS)', tono: 'neutral' as const, accent: ACCENTS[5] },
   ];
 
-  // Alzas vs bajas por período (mes o semana según granularidad): barra verde
-  // hacia arriba (subió) y roja hacia abajo (bajó), con línea de cero.
-  const porSemana = granularidad === 'semana';
+  // Alzas vs bajas por período (mes/semana/catorcena según granularidad): barra
+  // verde hacia arriba (subió) y roja hacia abajo (bajó), con línea de cero.
+  const unidad = granularidad === 'semana' ? 'semana' : granularidad === 'catorcena' ? 'catorcena' : 'mes';
   const bucketDe = (e: Impacto['ediciones'][number]) =>
-    porSemana ? isoWeek(new Date(e.fecha)) : new Date(e.fecha).getMonth() + 1;
-  const etiquetaBucket = (b: number) => (porSemana ? `Sem ${b}` : MESES[b - 1]);
+    unidad === 'semana' ? isoWeek(new Date(e.fecha)) : unidad === 'catorcena' ? catDe(e.fecha) : new Date(e.fecha).getMonth() + 1;
+  const etiquetaBucket = (b: number) => (unidad === 'semana' ? `Sem ${b}` : unidad === 'catorcena' ? `Cat ${b}` : MESES[b - 1]);
   const porPeriodo = new Map<number, { alzas: number; bajas: number }>();
   for (const e of fil) {
     const b = bucketDe(e);
@@ -681,10 +698,13 @@ export function VariacionesPage() {
 
       <div className={cn(CARD, 'space-y-3 !p-3', 'sticky z-20 top-[calc(var(--bi-header-h,104px)_+_8px)]')}>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <SelectBox label="Granularidad" valor={granularidad} opciones={[['mes', 'Mes'], ['semana', 'Semana'], ['anio', 'Año']]} onSel={(v) => setGranularidad(v as typeof granularidad)} />
+          <SelectBox label="Granularidad" valor={granularidad} opciones={[['mes', 'Mes'], ['catorcena', 'Catorcena'], ['semana', 'Semana'], ['anio', 'Año']]} onSel={(v) => setGranularidad(v as typeof granularidad)} />
           <SelectBox label="Año" valor={String(anio)} opciones={ANIOS.map((a) => [String(a), String(a)])} onSel={(v) => setAnio(Number(v))} />
           {granularidad === 'mes' && (
             <SelectBox label="Mes" valor={String(mesSel)} opciones={[['0', 'Todos'], ...MESES.map((m, i) => [String(i + 1), m] as [string, string])]} onSel={(v) => setMesSel(Number(v))} />
+          )}
+          {granularidad === 'catorcena' && (
+            <SelectBox label="Catorcena" valor={String(catSel)} opciones={[['0', 'Todas'], ...catorcenasDisp.map((c) => [String(c), `Cat ${c}`] as [string, string])]} onSel={(v) => setCatSel(Number(v))} />
           )}
           {granularidad === 'semana' && (
             <SelectBox label="Semana" valor={String(semSel)} opciones={[['0', 'Todas'], ...semanasDisp.map((w) => [String(w), `Sem ${w}`] as [string, string])]} onSel={(v) => setSemSel(Number(v))} />
@@ -868,7 +888,7 @@ export function VariacionesPage() {
         </div>
 
         <div className={cn(CARD, 'mt-3')}>
-          <CardTitle>Variación de inversión por {porSemana ? 'semana' : 'mes'}</CardTitle>
+          <CardTitle>Variación de inversión por {unidad}</CardTitle>
           <p className="-mt-1 mb-2 text-[11px] text-zinc-400">Alzas y bajas según la fecha de la edición; la línea es el efecto neto</p>
           <ResponsiveContainer width="100%" height={300}>
             <ComposedChart data={barrasMes} stackOffset="sign" margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>

@@ -49,3 +49,7 @@ export async function getVentaTotal(f: Partial<FiltrosReporte>): Promise<number>
   const r = await getJSON<{ total: number }>(`/reportes/venta-total?${qsFiltros(f)}`);
   return r.total ?? 0;
 }
+
+export interface CatorcenaCal { catorcena: number; ini: string | null; fin: string | null; etiqueta: string }
+/** Calendario de catorcenas del año. */
+export const getCatorcenas = (anio = ANIO_DEF) => getJSON<CatorcenaCal[]>(`/reportes/catorcenas?anio=${anio}`);
