@@ -43,11 +43,11 @@ export function VentasPorSemanaChart({
   const ordenado = [...conDelta].sort((a, b) => b.semana - a.semana);
 
   // Etiqueta a la derecha de cada barra: monto + variación vs semana previa.
-  const LabelDelta = (p: { x?: number; y?: number; width?: number; height?: number; index?: number }) => {
+  const LabelDelta = (p: { x?: number | string; y?: number | string; width?: number | string; height?: number | string; index?: number }) => {
     const row = ordenado[p.index ?? 0];
     if (!row || p.x == null || p.y == null) return null;
-    const cx = p.x + (p.width ?? 0) + 6;
-    const cy = p.y + (p.height ?? 0) / 2;
+    const cx = Number(p.x) + Number(p.width ?? 0) + 6;
+    const cy = Number(p.y) + Number(p.height ?? 0) / 2;
     const d = row.deltaPct;
     const col = d == null ? ink.label : d > 0 ? '#22c55e' : d < 0 ? '#f43f5e' : ink.axis;
     return (
