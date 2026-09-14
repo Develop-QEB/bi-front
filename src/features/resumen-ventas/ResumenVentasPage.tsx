@@ -19,6 +19,8 @@ const FILTROS_INICIALES: FiltrosResumen = {
   mes: null,
 };
 
+const MESES_AB = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
 export function ResumenVentasPage() {
   const [filtros, setFiltros] = useState<FiltrosResumen>(FILTROS_INICIALES);
   // Meses seleccionados (1–12). Vacío = todo el año. Es selección de cliente:
@@ -87,6 +89,35 @@ export function ResumenVentasPage() {
                 Datos actualizados el {formatDate(datos.actualizadoEn)}
                 {cargando && <span className="ml-2 opacity-60">· actualizando…</span>}
               </p>
+
+              {(() => {
+                const partes = [
+                  filtros.base ?? 'Todas las bases',
+                  filtros.asesor ?? 'Todos los asesores',
+                  filtros.cliente ?? 'Todos los clientes',
+                  `Año ${filtros.anio}`,
+                  mesesSel.length ? mesesSel.slice().sort((a, b) => a - b).map((m) => MESES_AB[m - 1]).join(', ') : 'Todos los meses',
+                ];
+                const personalizado = Boolean(filtros.base || filtros.asesor || filtros.cliente || mesesSel.length);
+                return (
+                  <div
+                    className={
+                      personalizado
+                        ? 'mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-purple-300/50 bg-purple-500/5 p-3 text-xs text-zinc-600 dark:border-purple-800/40 dark:text-zinc-300'
+                        : 'mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-amber-400/60 bg-amber-400/10 p-3 text-xs text-amber-800 dark:border-amber-500/40 dark:text-amber-200'
+                    }
+                  >
+                    <span aria-hidden>{personalizado ? '🔎' : '⚠️'}</span>
+                    <span className="font-semibold">
+                      {personalizado ? 'Información filtrada.' : 'La información NO está personalizada/filtrada.'}
+                    </span>
+                    <span>Contiene:</span>
+                    {partes.map((p) => (
+                      <span key={p} className="rounded-full bg-black/5 px-2 py-0.5 dark:bg-white/10">{p}</span>
+                    ))}
+                  </div>
+                );
+              })()}
 
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
                 {/* Fila 1 — cumplimiento contra presupuesto + ritmo semanal */}

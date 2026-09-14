@@ -13,7 +13,7 @@ import { chartInk } from '../../lib/chartTheme';
 import { useThemeStore } from '../../store/themeStore';
 import { getAsesores, getResumenVentas } from '../../services/resumenVentas.service';
 import { getImpacto } from '../../services/historial.service';
-import { getCampanias, getCiclo, getDistribucion, getEmbudo, getOpciones, getVentasPeriodo } from '../../services/reportes.service';
+import { getCampanias, getCiclo, getDistribucion, getEmbudo, getOpciones, getVentasPeriodo, getVentaTotal } from '../../services/reportes.service';
 import { asesorObjetivoDe, objetivoAnual, objetivoDe, useObjetivosStore } from '../../store/objetivosStore';
 import type { ResumenVentas } from '../../types/bi';
 import type { CampaniaDetalle, Ciclo, ConteoMonto, Embudo, EtapaEmbudo, FiltrosReporte, Impacto, OpcionesReporte, Periodo } from '../../types/reportes';
@@ -28,6 +28,15 @@ const CARD = cn(
 const MESES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
 const fmtM = (v: number) => (Math.abs(v) >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${(v / 1e3).toFixed(0)}k`);
 const nf = (n: number) => n.toLocaleString('es-MX');
+const fmtFecha = (iso: string) => new Date(iso).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+// Semana ISO (1–53) de una fecha, alineada con la etiqueta "Semana N" del BI.
+function isoWeek(d: Date): number {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  const yStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return Math.ceil(((t.getTime() - yStart.getTime()) / 86400000 + 1) / 7);
+}
 const CardTitle = ({ children }: { children: ReactNode }) => (
   <h3 className="mb-2 text-xs font-light tracking-wide text-purple-700 dark:text-purple-200">{children}</h3>
 );
@@ -461,8 +470,9 @@ export function VariacionesPage() {
   const [imp, setImp] = useState<Impacto | null>(null);
   const [error, setError] = useState(false);
   const [anio, setAnio] = useState(ANIO);
-  const [granularidad, setGranularidad] = useState<'mes' | 'anio'>('mes');
+  const [granularidad, setGranularidad] = useState<'mes' | 'semana' | 'anio'>('mes');
   const [mesSel, setMesSel] = useState(0); // 0 = todos
+  const [semSel, setSemSel] = useState(0); // 0 = todas (semana ISO)
   const [plaza, setPlaza] = useState('');
   const [formato, setFormato] = useState('');
   const [mueble, setMueble] = useState('');
@@ -474,9 +484,22 @@ export function VariacionesPage() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const ink = chartInk(isDark);
 
+  const [ventaTotal, setVentaTotal] = useState<number | null>(null);
+
   useEffect(() => {
     getImpacto(anio).then(setImp).catch(() => setError(true));
   }, [anio]);
+
+  // Venta real del período (V_APS) según el alcance filtrado — KPI "Venta neta total".
+  useEffect(() => {
+    setVentaTotal(null);
+    getVentaTotal({
+      anio,
+      mes: granularidad === 'mes' && mesSel ? mesSel : null,
+      plaza: plaza || null, formato: formato || null, mueble: mueble || null,
+      cliente: cliente || null, asesor: asesor || null,
+    }).then(setVentaTotal).catch(() => setVentaTotal(null));
+  }, [anio, granularidad, mesSel, plaza, formato, mueble, cliente, asesor]);
 
   // Opciones de los dropdowns, derivadas del universo de ediciones del año.
   const opciones = useMemo(() => {
@@ -501,8 +524,11 @@ export function VariacionesPage() {
   };
   const signo = (e: Impacto['ediciones'][number]) => ((e.monto ?? 0) !== 0 ? (e.monto ?? 0) : e.caras);
 
+  // Semanas ISO presentes en las ediciones del año (para el dropdown de Semana).
+  const semanasDisp = [...new Set(imp.ediciones.map((e) => isoWeek(new Date(e.fecha))))].sort((a, b) => a - b);
+
   const limpiar = () => {
-    setGranularidad('mes'); setMesSel(0); setPlaza(''); setFormato(''); setMueble('');
+    setGranularidad('mes'); setMesSel(0); setSemSel(0); setPlaza(''); setFormato(''); setMueble('');
     setCliente(''); setAsesor(''); setCampoFiltro('todos'); setDireccion('todas'); setEntidad('todos');
   };
 
@@ -518,6 +544,7 @@ export function VariacionesPage() {
     if (cliente && e.cliente !== cliente) return false;
     if (asesor && e.asesor !== asesor) return false;
     if (granularidad === 'mes' && mesSel && new Date(e.fecha).getMonth() + 1 !== mesSel) return false;
+    if (granularidad === 'semana' && semSel && isoWeek(new Date(e.fecha)) !== semSel) return false;
     const s = signo(e);
     if (direccion === 'alzas' && s <= 0) return false;
     if (direccion === 'bajas' && s >= 0) return false;
@@ -530,7 +557,6 @@ export function VariacionesPage() {
   const sumBajas = bajas.reduce((a, e) => a + (e.monto ?? 0), 0);
   const total = fil.reduce((a, e) => a + (e.monto ?? 0), 0);
   const promedio = fil.length ? total / fil.length : 0;
-  const mayor = fil.reduce<Impacto['ediciones'][number] | null>((m, e) => (Math.abs(e.monto ?? 0) > Math.abs(m?.monto ?? 0) ? e : m), null);
   const campaniasEditadas = new Set(fil.map((e) => e.campania ?? e.refId)).size;
 
   const kpis = [
@@ -539,22 +565,26 @@ export function VariacionesPage() {
     { titulo: 'Impacto promedio', valor: `${promedio >= 0 ? '+' : ''}${formatCurrency(promedio)}`, sub: 'Magnitud por edición', tono: promedio >= 0 ? 'up' as const : 'down' as const, accent: ACCENTS[2] },
     { titulo: 'Alzas', valor: `+${formatCurrency(sumAlzas)}`, sub: `${alzas.length} ediciones al alza`, tono: 'up' as const, accent: ACCENTS[3] },
     { titulo: 'Bajas', valor: formatCurrency(sumBajas), sub: `${bajas.length} ediciones a la baja`, tono: 'down' as const, accent: ACCENTS[4] },
-    { titulo: 'Mayor impacto', valor: mayor ? formatCurrency(mayor.monto ?? 0) : '—', sub: mayor?.campania ?? mayor?.usuario ?? '', tono: (mayor?.monto ?? 0) >= 0 ? 'up' as const : 'down' as const, accent: ACCENTS[5] },
+    { titulo: 'Venta neta total', valor: ventaTotal == null ? '…' : formatCurrency(ventaTotal), sub: 'Venta real del período (V_APS)', tono: 'neutral' as const, accent: ACCENTS[5] },
   ];
 
-  // Alzas vs bajas por mes: barra verde hacia arriba (lo que subió) y roja hacia
-  // abajo (lo que bajó), con línea de cero enmedio.
-  const porMes = new Map<number, { alzas: number; bajas: number }>();
+  // Alzas vs bajas por período (mes o semana según granularidad): barra verde
+  // hacia arriba (subió) y roja hacia abajo (bajó), con línea de cero.
+  const porSemana = granularidad === 'semana';
+  const bucketDe = (e: Impacto['ediciones'][number]) =>
+    porSemana ? isoWeek(new Date(e.fecha)) : new Date(e.fecha).getMonth() + 1;
+  const etiquetaBucket = (b: number) => (porSemana ? `Sem ${b}` : MESES[b - 1]);
+  const porPeriodo = new Map<number, { alzas: number; bajas: number }>();
   for (const e of fil) {
-    const m = new Date(e.fecha).getMonth() + 1;
-    const x = porMes.get(m) ?? { alzas: 0, bajas: 0 };
+    const b = bucketDe(e);
+    const x = porPeriodo.get(b) ?? { alzas: 0, bajas: 0 };
     const v = e.monto ?? 0;
     if (v > 0) x.alzas += v; else if (v < 0) x.bajas += v;
-    porMes.set(m, x);
+    porPeriodo.set(b, x);
   }
-  const barrasMes = [...porMes.entries()]
+  const barrasMes = [...porPeriodo.entries()]
     .sort((a, b) => a[0] - b[0])
-    .map(([m, v]) => ({ mes: MESES[m - 1], alzas: v.alzas, bajas: v.bajas, neta: v.alzas + v.bajas }));
+    .map(([b, v]) => ({ mes: etiquetaBucket(b), alzas: v.alzas, bajas: v.bajas, neta: v.alzas + v.bajas }));
   const filas = fil;
 
   // Clientes con más ajuste (variación neta absoluta).
@@ -587,10 +617,24 @@ export function VariacionesPage() {
   }
   const maxAporte = Math.max(Math.abs(aporteCaras), Math.abs(aporteTarifa), 1);
 
-  // Cómo se movió la inversión (cascada): base (Σ inversión antes) → +Δcaras → +Δtarifa → actual.
-  let invBase = 0;
-  for (const e of fil) if (e.invAntes != null) invBase += e.invAntes;
+  // Cómo se movió la inversión (cascada): base → +Δcaras → +Δtarifa → actual.
+  // Base SIN doble conteo: cada campaña cuenta 1 vez con su PRIMER "antes"
+  // (una campaña editada N veces no suma su base N veces).
+  const primerAntesPorCamp = new Map<string | number, { fecha: number; inv: number }>();
+  for (const e of fil) {
+    if (e.invAntes == null) continue;
+    const k = e.campania ?? e.refId ?? e.id;
+    const t = new Date(e.fecha).getTime();
+    const prev = primerAntesPorCamp.get(k);
+    if (!prev || t < prev.fecha) primerAntesPorCamp.set(k, { fecha: t, inv: e.invAntes });
+  }
+  const invBase = [...primerAntesPorCamp.values()].reduce((a, x) => a + x.inv, 0);
   const invActual = invBase + aporteCaras + aporteTarifa;
+
+  // Rango de fechas de las ediciones consideradas (para "fecha base").
+  const fechasFil = fil.map((e) => new Date(e.fecha).getTime()).filter((t) => Number.isFinite(t));
+  const fechaBaseIni = fechasFil.length ? new Date(Math.min(...fechasFil)).toISOString() : null;
+  const fechaBaseFin = fechasFil.length ? new Date(Math.max(...fechasFil)).toISOString() : null;
   const pctBase = (v: number) => (invBase ? (v / invBase) * 100 : 0);
   const trayectoria = [
     { etapa: 'Inversión base', valor: invBase },
@@ -630,14 +674,18 @@ export function VariacionesPage() {
     <div className="space-y-4">
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
         Cada registro proviene del historial de acciones: una edición de caras o tarifa que modificó la inversión de una campaña ya creada (venta cerrada).
+        Los montos se cuentan por <b>fecha en que se hizo la edición</b> (no por el periodo de venta de la campaña).
       </p>
 
       <div className={cn(CARD, 'space-y-3 !p-3', 'sticky z-20 top-[calc(var(--bi-header-h,104px)_+_8px)]')}>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <SelectBox label="Granularidad" valor={granularidad} opciones={[['mes', 'Mes'], ['anio', 'Año']]} onSel={(v) => setGranularidad(v as typeof granularidad)} />
+          <SelectBox label="Granularidad" valor={granularidad} opciones={[['mes', 'Mes'], ['semana', 'Semana'], ['anio', 'Año']]} onSel={(v) => setGranularidad(v as typeof granularidad)} />
           <SelectBox label="Año" valor={String(anio)} opciones={ANIOS.map((a) => [String(a), String(a)])} onSel={(v) => setAnio(Number(v))} />
           {granularidad === 'mes' && (
             <SelectBox label="Mes" valor={String(mesSel)} opciones={[['0', 'Todos'], ...MESES.map((m, i) => [String(i + 1), m] as [string, string])]} onSel={(v) => setMesSel(Number(v))} />
+          )}
+          {granularidad === 'semana' && (
+            <SelectBox label="Semana" valor={String(semSel)} opciones={[['0', 'Todas'], ...semanasDisp.map((w) => [String(w), `Sem ${w}`] as [string, string])]} onSel={(v) => setSemSel(Number(v))} />
           )}
           <SelectBox label="Plaza" valor={plaza} opciones={conTodos(opciones.plazas)} onSel={setPlaza} />
           <SelectBox label="Formato" valor={formato} opciones={conTodos(opciones.formatos)} onSel={setFormato} />
@@ -784,7 +832,7 @@ export function VariacionesPage() {
             Trayectoria del monto invertido: parte de la inversión base y acumula el efecto de las ediciones de caras y tarifa hasta la inversión actual.
           </p>
           <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <MetricCard titulo="Inversión base" valor={formatCurrency(invBase)} sub="Monto antes de las ediciones" tono="neutral" accent={ACCENTS[0]} />
+            <MetricCard titulo="Inversión base" valor={formatCurrency(invBase)} sub={fechaBaseIni ? `Antes de las ediciones · ${fmtFecha(fechaBaseIni)} → ${fmtFecha(fechaBaseFin!)}` : 'Monto antes de las ediciones'} tono="neutral" accent={ACCENTS[0]} />
             <MetricCard titulo="Δ por caras" valor={`${aporteCaras >= 0 ? '+' : ''}${formatCurrency(aporteCaras)}`} sub={`${pctBase(aporteCaras).toFixed(1)}% del base`} tono={aporteCaras >= 0 ? 'up' : 'down'} accent={ACCENTS[1]} />
             <MetricCard titulo="Δ por tarifa" valor={`${aporteTarifa >= 0 ? '+' : ''}${formatCurrency(aporteTarifa)}`} sub={`${pctBase(aporteTarifa).toFixed(1)}% del base`} tono={aporteTarifa >= 0 ? 'up' : 'down'} accent={ACCENTS[2]} />
             <MetricCard titulo="Inversión actual" valor={formatCurrency(invActual)} sub={`${pctBase(invActual - invBase) >= 0 ? '+' : ''}${pctBase(invActual - invBase).toFixed(1)}% vs base`} tono={invActual >= invBase ? 'up' : 'down'} accent={ACCENTS[3]} />
@@ -818,7 +866,7 @@ export function VariacionesPage() {
         </div>
 
         <div className={cn(CARD, 'mt-3')}>
-          <CardTitle>Variación de inversión por mes</CardTitle>
+          <CardTitle>Variación de inversión por {porSemana ? 'semana' : 'mes'}</CardTitle>
           <p className="-mt-1 mb-2 text-[11px] text-zinc-400">Alzas y bajas según la fecha de la edición; la línea es el efecto neto</p>
           <ResponsiveContainer width="100%" height={300}>
             <ComposedChart data={barrasMes} stackOffset="sign" margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>

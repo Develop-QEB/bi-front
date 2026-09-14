@@ -43,3 +43,9 @@ export const getCampanias = (limit = 120, f: Partial<FiltrosReporte> = { anio: A
 
 /** Valores distintos para los dropdowns de la barra de filtros. */
 export const getOpciones = (anio = ANIO_DEF) => getJSON<OpcionesReporte>(`/reportes/opciones?anio=${anio}`);
+
+/** Venta real total (SUM Monto Total de V_APS) según el alcance filtrado. */
+export async function getVentaTotal(f: Partial<FiltrosReporte>): Promise<number> {
+  const r = await getJSON<{ total: number }>(`/reportes/venta-total?${qsFiltros(f)}`);
+  return r.total ?? 0;
+}
