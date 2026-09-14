@@ -163,8 +163,7 @@ export function ResumenVentasPage() {
               </div>
 
               <p className="mt-6 text-center text-xs text-zinc-400 dark:text-zinc-500">
-                Fuente: vista{' '}
-                <code className="rounded bg-purple-500/10 px-1 py-0.5">V_APS_Globales</code> (QEB) vía bi-back.
+                Fuente: base de ventas QEB.
               </p>
             </>
           )}

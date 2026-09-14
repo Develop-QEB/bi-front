@@ -676,11 +676,11 @@ export function VariacionesPage() {
   // KPI "Venta neta total" (V_APS) + comparación ▲/▼ vs período previo.
   const ventaDeltaPct = ventaTotal != null && ventaPrev != null && ventaPrev !== 0 ? ((ventaTotal - ventaPrev) / ventaPrev) * 100 : null;
   const ventaTotalKpi = {
-    titulo: 'Venta neta total',
+    titulo: 'Venta acumulada total',
     valor: ventaTotal == null ? '…' : formatCurrency(ventaTotal),
     sub: ventaDeltaPct != null
       ? `${ventaDeltaPct >= 0 ? '▲ +' : '▼ '}${ventaDeltaPct.toFixed(1)}% vs período previo`
-      : 'Venta real del período (V_APS)',
+      : 'Venta acumulada por período',
     tono: ventaDeltaPct == null ? ('neutral' as const) : ventaDeltaPct >= 0 ? ('up' as const) : ('down' as const),
     accent: ACCENTS[5],
   };
@@ -872,7 +872,7 @@ export function VariacionesPage() {
 
       <div className={CARD}>
         <CardTitle>Variación de inversión por {unidad}</CardTitle>
-        <p className="-mt-1 mb-2 text-[11px] text-zinc-400">Ediciones del período (izq.) vs venta real V_APS del período (der.)</p>
+        <p className="-mt-1 mb-2 text-[11px] text-zinc-400">Ediciones del período (izq.) vs venta acumulada del período (der.)</p>
         <ResponsiveContainer width="100%" height={300}>
           <ComposedChart data={barrasMes} stackOffset="sign" margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
             <CartesianGrid stroke={ink.grid} vertical={false} />
@@ -887,11 +887,11 @@ export function VariacionesPage() {
             <Bar yAxisId="var" dataKey="alzas" name="Alzas" stackId="v" fill="#22c55e" radius={[3, 3, 0, 0]} maxBarSize={46} />
             <Bar yAxisId="var" dataKey="bajas" name="Bajas" stackId="v" fill="#f43f5e" radius={[0, 0, 3, 3]} maxBarSize={46} />
             <Line yAxisId="var" type="monotone" dataKey="neta" name="Neta (ediciones)" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3, fill: '#f59e0b', stroke: '#f59e0b' }} activeDot={{ r: 5 }} />
-            <Line yAxisId="venta" type="monotone" dataKey="ventaTotal" name="Venta neta total (V_APS)" stroke="#0ea5e9" strokeWidth={2.5} strokeDasharray="5 3" dot={{ r: 3, fill: '#0ea5e9', stroke: '#0ea5e9' }} activeDot={{ r: 5 }} />
+            <Line yAxisId="venta" type="monotone" dataKey="ventaTotal" name="Venta acumulada por período" stroke="#0ea5e9" strokeWidth={2.5} strokeDasharray="5 3" dot={{ r: 3, fill: '#0ea5e9', stroke: '#0ea5e9' }} activeDot={{ r: 5 }} />
           </ComposedChart>
         </ResponsiveContainer>
         <p className="mt-1 text-center text-[11px] text-zinc-400">
-          Barras verde/rojo = alzas/bajas de ediciones · línea ámbar (Neta) = efecto neto de las ediciones (eje izq.) · línea azul = Venta neta total real V_APS del período (eje der., la base a comparar)
+          Barras verde/rojo = alzas/bajas de ediciones · línea ámbar (Neta) = efecto neto de las ediciones (eje izq.) · línea azul = Venta acumulada por período (eje der., la base a comparar)
         </p>
       </div>
 
