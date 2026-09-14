@@ -17,6 +17,9 @@ function qsFiltros(f: Partial<FiltrosReporte>): string {
   if (f.mueble) p.set('mueble', f.mueble);
   if (f.cliente) p.set('cliente', f.cliente);
   if (f.asesor) p.set('asesor', f.asesor);
+  if (f.meses?.length) p.set('meses', f.meses.join(','));
+  if (f.catorcenas?.length) p.set('catorcenas', f.catorcenas.join(','));
+  if (f.semanas?.length) p.set('semanas', f.semanas.join(','));
   return p.toString();
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ChevronDown, SlidersHorizontal } from 'lucide-react';
 import {
@@ -203,10 +203,17 @@ export function EmbudoPage() {
   const cicloMax = Math.max(ciclo?.cicloTotalDias ?? 1, ...(ciclo?.etapas.map((e) => e.dias) ?? [1]));
   const topCli = cliente.slice(0, 8);
 
+  const chipsEmbudo = [
+    filtros.mes ? MESES[filtros.mes - 1] : '', filtros.plaza ?? '', filtros.formato ?? '', filtros.mueble ?? '', filtros.cliente ?? '', filtros.asesor ?? '',
+  ].filter(Boolean) as string[];
+  const resumenEmbudo = chipsEmbudo.length
+    ? chipsEmbudo.slice(0, 2).join(', ') + (chipsEmbudo.length > 2 ? ` +${chipsEmbudo.length - 2}` : '')
+    : 'Todos';
+
   return (
     <div className="space-y-4">
-      {/* Barra de filtros (fija al hacer scroll en desktop; colapsable en móvil) — afecta toda la tab */}
-      <BarraFiltros>
+      {/* Barra de filtros (fija al hacer scroll; colapsable en móvil) — afecta toda la tab */}
+      <BarraFiltros resumen={resumenEmbudo}>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">
           <SelectBox label="Granularidad" valor={granularidad} opciones={[['mes', 'Mes'], ['anio', 'Año']]} onSel={(v) => { setGranularidad(v as typeof granularidad); if (v === 'anio') setF('mes', null); }} />
           <SelectBox label="Año" valor={String(filtros.anio)} opciones={ANIOS.map((a) => [String(a), String(a)])} onSel={(v) => setF('anio', Number(v))} />
@@ -444,18 +451,58 @@ function LeyendaPosNeg() {
 const ANIOS = [2026, 2025, 2024];
 const conTodos = (arr: string[]): [string, string][] => [['', 'Todos'], ...arr.map((a) => [a, a] as [string, string])];
 
-// Contenedor de la barra de filtros: sticky en desktop; colapsable en móvil
-// (para que muchos controles no tapen la pantalla). En sm+ siempre visible.
-function BarraFiltros({ children }: { children: ReactNode }) {
+// Dropdown de multi-selección con checkboxes (varios meses / catorcenas / semanas).
+function MultiSelect({ label, opciones, sel, onChange }: { label: string; opciones: [number, string][]; sel: number[]; onChange: (s: number[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: PointerEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('pointerdown', h);
+    return () => document.removeEventListener('pointerdown', h);
+  }, [open]);
+  const toggle = (v: number) => onChange(sel.includes(v) ? sel.filter((x) => x !== v) : [...sel, v].sort((a, b) => a - b));
+  const resumen = sel.length === 0 ? 'Todos' : sel.length === 1 ? (opciones.find((o) => o[0] === sel[0])?.[1] ?? '1') : `${sel.length} seleccionados`;
+  return (
+    <div ref={ref} className="relative flex w-full items-center gap-1.5 text-xs sm:w-auto">
+      <span className="w-24 shrink-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400 sm:w-auto">{label}</span>
+      <button
+        type="button" onClick={() => setOpen((v) => !v)}
+        className="flex min-w-0 flex-1 items-center justify-between gap-1 rounded-lg border border-purple-200/60 bg-white/80 px-2 py-1.5 text-xs text-zinc-700 shadow-sm outline-none focus:border-purple-400 dark:border-purple-900/40 dark:bg-[#241633] dark:text-zinc-200 sm:max-w-[170px] sm:flex-none sm:py-1"
+      >
+        <span className="truncate">{resumen}</span>
+        <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-40 mt-1 max-h-64 w-48 overflow-auto rounded-lg border border-purple-200/60 bg-white p-1 shadow-2xl dark:border-purple-900/40 dark:bg-[#241633]">
+          <button onClick={() => onChange([])} className="w-full px-2 py-1 text-left text-[11px] text-purple-600 hover:underline dark:text-purple-300">Limpiar (todos)</button>
+          {opciones.map(([v, l]) => (
+            <label key={v} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs text-zinc-700 hover:bg-purple-500/10 dark:text-zinc-200">
+              <input type="checkbox" checked={sel.includes(v)} onChange={() => toggle(v)} className="accent-purple-600" />
+              <span>{l}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Contenedor de la barra de filtros: pegado (sticky) al hacer scroll en todos los
+// tamaños; colapsable en móvil (muestra un resumen de filtros activos).
+function BarraFiltros({ children, resumen }: { children: ReactNode; resumen?: ReactNode }) {
   const [abierto, setAbierto] = useState(false);
   return (
-    <div className={cn(CARD, '!p-3', 'sm:sticky sm:z-20 sm:top-[calc(var(--bi-header-h,104px)_+_8px)]')}>
+    <div className={cn(CARD, '!p-3', 'sticky z-20 top-[calc(var(--bi-header-h,104px)_+_8px)]')}>
       <button
         onClick={() => setAbierto((v) => !v)}
-        className="flex w-full items-center justify-between text-xs font-medium text-purple-700 dark:text-purple-200 sm:hidden"
+        className="flex w-full items-center justify-between gap-2 text-xs font-medium text-purple-700 dark:text-purple-200 sm:hidden"
       >
         <span className="flex items-center gap-1.5"><SlidersHorizontal className="h-4 w-4" /> Filtros</span>
-        <ChevronDown className={cn('h-4 w-4 transition-transform', abierto && 'rotate-180')} />
+        <span className="flex min-w-0 items-center gap-2">
+          {resumen && <span className="truncate text-[11px] font-normal text-zinc-500 dark:text-zinc-400">{resumen}</span>}
+          <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', abierto && 'rotate-180')} />
+        </span>
       </button>
       <div className={cn('space-y-3', abierto ? 'mt-3 sm:mt-0' : 'hidden sm:block')}>
         {children}
@@ -495,9 +542,9 @@ export function VariacionesPage() {
   const [error, setError] = useState(false);
   const [anio, setAnio] = useState(ANIO);
   const [granularidad, setGranularidad] = useState<'mes' | 'catorcena' | 'semana' | 'anio'>('mes');
-  const [mesSel, setMesSel] = useState(0); // 0 = todos
-  const [semSel, setSemSel] = useState(0); // 0 = todas (semana ISO)
-  const [catSel, setCatSel] = useState(0); // 0 = todas (catorcena)
+  const [mesesSel, setMesesSel] = useState<number[]>([]); // vacío = todos
+  const [semsSel, setSemsSel] = useState<number[]>([]);   // semanas ISO
+  const [catsSel, setCatsSel] = useState<number[]>([]);   // catorcenas
   const [catCal, setCatCal] = useState<CatorcenaCal[]>([]); // calendario de catorcenas del año
   const [plaza, setPlaza] = useState('');
   const [formato, setFormato] = useState('');
@@ -511,22 +558,34 @@ export function VariacionesPage() {
   const ink = chartInk(isDark);
 
   const [ventaTotal, setVentaTotal] = useState<number | null>(null);
+  const [ventaPrev, setVentaPrev] = useState<number | null>(null); // período inmediato anterior (para ▲/▼)
 
   useEffect(() => {
     getImpacto(anio).then(setImp).catch(() => setError(true));
     getCatorcenas(anio).then(setCatCal).catch(() => setCatCal([]));
   }, [anio]);
 
-  // Venta real del período (V_APS) según el alcance filtrado — KPI "Venta neta total".
+  // Venta real del período (V_APS) según el alcance filtrado + comparación vs el
+  // período inmediato anterior (solo cuando hay un único período seleccionado).
   useEffect(() => {
-    setVentaTotal(null);
-    getVentaTotal({
-      anio,
-      mes: granularidad === 'mes' && mesSel ? mesSel : null,
-      plaza: plaza || null, formato: formato || null, mueble: mueble || null,
-      cliente: cliente || null, asesor: asesor || null,
-    }).then(setVentaTotal).catch(() => setVentaTotal(null));
-  }, [anio, granularidad, mesSel, plaza, formato, mueble, cliente, asesor]);
+    setVentaTotal(null); setVentaPrev(null);
+    const base = { anio, plaza: plaza || null, formato: formato || null, mueble: mueble || null, cliente: cliente || null, asesor: asesor || null };
+    const per: Partial<FiltrosReporte> =
+      granularidad === 'mes' ? { meses: mesesSel }
+      : granularidad === 'catorcena' ? { catorcenas: catsSel }
+      : granularidad === 'semana' ? { semanas: semsSel }
+      : {};
+    getVentaTotal({ ...base, ...per }).then(setVentaTotal).catch(() => setVentaTotal(null));
+
+    // Período previo: único valor seleccionado y > 1.
+    const uno = granularidad === 'mes' && mesesSel.length === 1 ? { key: 'meses' as const, v: mesesSel[0] }
+      : granularidad === 'catorcena' && catsSel.length === 1 ? { key: 'catorcenas' as const, v: catsSel[0] }
+      : granularidad === 'semana' && semsSel.length === 1 ? { key: 'semanas' as const, v: semsSel[0] }
+      : null;
+    if (uno && uno.v > 1) {
+      getVentaTotal({ ...base, [uno.key]: [uno.v - 1] }).then(setVentaPrev).catch(() => setVentaPrev(null));
+    }
+  }, [anio, granularidad, mesesSel, catsSel, semsSel, plaza, formato, mueble, cliente, asesor]);
 
   // Opciones de los dropdowns, derivadas del universo de ediciones del año.
   const opciones = useMemo(() => {
@@ -567,7 +626,7 @@ export function VariacionesPage() {
   const catorcenasDisp = [...new Set(imp.ediciones.map((e) => catDe(e.fecha)).filter((c) => c > 0))].sort((a, b) => a - b);
 
   const limpiar = () => {
-    setGranularidad('mes'); setMesSel(0); setSemSel(0); setCatSel(0); setPlaza(''); setFormato(''); setMueble('');
+    setGranularidad('mes'); setMesesSel([]); setSemsSel([]); setCatsSel([]); setPlaza(''); setFormato(''); setMueble('');
     setCliente(''); setAsesor(''); setCampoFiltro('todos'); setDireccion('todas'); setEntidad('todos');
   };
 
@@ -582,9 +641,9 @@ export function VariacionesPage() {
     if (mueble && !(e.muebles ?? []).includes(mueble)) return false;
     if (cliente && e.cliente !== cliente) return false;
     if (asesor && e.asesor !== asesor) return false;
-    if (granularidad === 'mes' && mesSel && new Date(e.fecha).getMonth() + 1 !== mesSel) return false;
-    if (granularidad === 'semana' && semSel && isoWeek(new Date(e.fecha)) !== semSel) return false;
-    if (granularidad === 'catorcena' && catSel && catDe(e.fecha) !== catSel) return false;
+    if (granularidad === 'mes' && mesesSel.length && !mesesSel.includes(new Date(e.fecha).getMonth() + 1)) return false;
+    if (granularidad === 'semana' && semsSel.length && !semsSel.includes(isoWeek(new Date(e.fecha)))) return false;
+    if (granularidad === 'catorcena' && catsSel.length && !catsSel.includes(catDe(e.fecha))) return false;
     const s = signo(e);
     if (direccion === 'alzas' && s <= 0) return false;
     if (direccion === 'bajas' && s >= 0) return false;
@@ -599,13 +658,25 @@ export function VariacionesPage() {
   const promedio = fil.length ? total / fil.length : 0;
   const campaniasEditadas = new Set(fil.map((e) => e.campania ?? e.refId)).size;
 
+  // KPI "Venta neta total" (V_APS) + comparación ▲/▼ vs período previo.
+  const ventaDeltaPct = ventaTotal != null && ventaPrev != null && ventaPrev !== 0 ? ((ventaTotal - ventaPrev) / ventaPrev) * 100 : null;
+  const ventaTotalKpi = {
+    titulo: 'Venta neta total',
+    valor: ventaTotal == null ? '…' : formatCurrency(ventaTotal),
+    sub: ventaDeltaPct != null
+      ? `${ventaDeltaPct >= 0 ? '▲ +' : '▼ '}${ventaDeltaPct.toFixed(1)}% vs período previo`
+      : 'Venta real del período (V_APS)',
+    tono: ventaDeltaPct == null ? ('neutral' as const) : ventaDeltaPct >= 0 ? ('up' as const) : ('down' as const),
+    accent: ACCENTS[5],
+  };
+
   const kpis = [
     { titulo: 'Ediciones registradas', valor: nf(fil.length), sub: `${campaniasEditadas} campañas afectadas`, tono: 'neutral' as const, accent: ACCENTS[0] },
     { titulo: 'Variación neta', valor: `${total >= 0 ? '+' : ''}${formatCurrency(total)}`, sub: 'Impacto total en inversión', tono: total >= 0 ? 'up' as const : 'down' as const, accent: ACCENTS[1] },
     { titulo: 'Impacto promedio', valor: `${promedio >= 0 ? '+' : ''}${formatCurrency(promedio)}`, sub: 'Magnitud por edición', tono: promedio >= 0 ? 'up' as const : 'down' as const, accent: ACCENTS[2] },
     { titulo: 'Alzas', valor: `+${formatCurrency(sumAlzas)}`, sub: `${alzas.length} ediciones al alza`, tono: 'up' as const, accent: ACCENTS[3] },
     { titulo: 'Bajas', valor: formatCurrency(sumBajas), sub: `${bajas.length} ediciones a la baja`, tono: 'down' as const, accent: ACCENTS[4] },
-    { titulo: 'Venta neta total', valor: ventaTotal == null ? '…' : formatCurrency(ventaTotal), sub: 'Venta real del período (V_APS)', tono: 'neutral' as const, accent: ACCENTS[5] },
+    ventaTotalKpi,
   ];
 
   // Alzas vs bajas por período (mes/semana/catorcena según granularidad): barra
@@ -710,6 +781,18 @@ export function VariacionesPage() {
     .filter((x) => x.monto !== 0)
     .sort((a, b) => b.monto - a.monto);
 
+  // Resumen compacto de filtros activos (para la barra colapsada en móvil).
+  const periodoLabels = granularidad === 'mes' ? mesesSel.map((m) => MESES[m - 1])
+    : granularidad === 'catorcena' ? catsSel.map((c) => `Cat ${c}`)
+    : granularidad === 'semana' ? semsSel.map((w) => `Sem ${w}`) : [];
+  const chipsActivos = [
+    ...periodoLabels, plaza, formato, mueble, cliente, asesor,
+    campoFiltro !== 'todos' ? campoFiltro : '', direccion !== 'todas' ? direccion : '', entidad !== 'todos' ? entidad : '',
+  ].filter(Boolean) as string[];
+  const resumenFiltros = chipsActivos.length
+    ? chipsActivos.slice(0, 2).join(', ') + (chipsActivos.length > 2 ? ` +${chipsActivos.length - 2}` : '')
+    : 'Todos';
+
   return (
     <div className="space-y-4">
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
@@ -717,18 +800,18 @@ export function VariacionesPage() {
         Los montos se cuentan por <b>fecha en que se hizo la edición</b> (no por el periodo de venta de la campaña).
       </p>
 
-      <BarraFiltros>
+      <BarraFiltros resumen={resumenFiltros}>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2">
           <SelectBox label="Granularidad" valor={granularidad} opciones={[['mes', 'Mes'], ['catorcena', 'Catorcena'], ['semana', 'Semana'], ['anio', 'Año']]} onSel={(v) => setGranularidad(v as typeof granularidad)} />
           <SelectBox label="Año" valor={String(anio)} opciones={ANIOS.map((a) => [String(a), String(a)])} onSel={(v) => setAnio(Number(v))} />
           {granularidad === 'mes' && (
-            <SelectBox label="Mes" valor={String(mesSel)} opciones={[['0', 'Todos'], ...MESES.map((m, i) => [String(i + 1), m] as [string, string])]} onSel={(v) => setMesSel(Number(v))} />
+            <MultiSelect label="Mes" opciones={MESES.map((m, i) => [i + 1, m] as [number, string])} sel={mesesSel} onChange={setMesesSel} />
           )}
           {granularidad === 'catorcena' && (
-            <SelectBox label="Catorcena" valor={String(catSel)} opciones={[['0', 'Todas'], ...catorcenasDisp.map((c) => [String(c), `Cat ${c}`] as [string, string])]} onSel={(v) => setCatSel(Number(v))} />
+            <MultiSelect label="Catorcena" opciones={catorcenasDisp.map((c) => [c, `Cat ${c}`] as [number, string])} sel={catsSel} onChange={setCatsSel} />
           )}
           {granularidad === 'semana' && (
-            <SelectBox label="Semana" valor={String(semSel)} opciones={[['0', 'Todas'], ...semanasDisp.map((w) => [String(w), `Sem ${w}`] as [string, string])]} onSel={(v) => setSemSel(Number(v))} />
+            <MultiSelect label="Semana" opciones={semanasDisp.map((w) => [w, `Sem ${w}`] as [number, string])} sel={semsSel} onChange={setSemsSel} />
           )}
           <SelectBox label="Plaza" valor={plaza} opciones={conTodos(opciones.plazas)} onSel={setPlaza} />
           <SelectBox label="Formato" valor={formato} opciones={conTodos(opciones.formatos)} onSel={setFormato} />

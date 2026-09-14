@@ -31,6 +31,9 @@ export interface FiltrosReporte {
   mueble?: string | null;
   cliente?: string | null;
   asesor?: string | null;
+  meses?: number[];
+  catorcenas?: number[];
+  semanas?: number[];
 }
 
 export interface OpcionesReporte {
