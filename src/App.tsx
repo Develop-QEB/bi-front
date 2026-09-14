@@ -16,7 +16,21 @@ const TABS = [
 
 function App() {
   const [vista, setVista] = useState<Vista>('bi');
+  const [menuAbierto, setMenuAbierto] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
+  const navRef = useRef<HTMLDivElement>(null);
+  const activo = TABS.find((t) => t.v === vista) ?? TABS[0];
+  const ActivoIcon = activo.Icon;
+
+  // Cierra el menú móvil al tocar fuera de él.
+  useEffect(() => {
+    if (!menuAbierto) return;
+    const onDown = (e: PointerEvent) => {
+      if (navRef.current && !navRef.current.contains(e.target as Node)) setMenuAbierto(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [menuAbierto]);
 
   // Publica la altura real del header como --bi-header-h para anclar barras sticky
   // justo debajo (aunque el header cambie de alto al reajustar la ventana).
@@ -52,7 +66,8 @@ function App() {
             </div>
           </div>
 
-          <nav className="mt-2.5 -mx-3 flex items-center gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0">
+          {/* Desktop: tabs en fila */}
+          <nav className="mt-2.5 hidden flex-wrap items-center gap-2 sm:flex">
             {TABS.map((t) => (
               <button
                 key={t.v}
@@ -69,6 +84,56 @@ function App() {
               </button>
             ))}
           </nav>
+
+          {/* Móvil: botón hamburguesa + menú desplegable animado */}
+          <div ref={navRef} className="relative mt-2.5 sm:hidden">
+            <button
+              onClick={() => setMenuAbierto((v) => !v)}
+              aria-expanded={menuAbierto}
+              aria-label="Menú de secciones"
+              className="flex w-full items-center gap-3 rounded-full bg-purple-500/10 px-3 py-2 text-purple-700 transition-transform duration-150 active:scale-[0.98] dark:text-purple-200"
+            >
+              {/* Hamburguesa que se transforma en X */}
+              <span className="relative flex h-5 w-6 shrink-0 items-center justify-center">
+                <span className={cn('absolute h-[2px] w-5 rounded-full bg-current transition-all duration-300 ease-out', menuAbierto ? 'rotate-45' : '-translate-y-[6px]')} />
+                <span className={cn('absolute h-[2px] w-5 rounded-full bg-current transition-all duration-200 ease-out', menuAbierto && 'opacity-0')} />
+                <span className={cn('absolute h-[2px] w-5 rounded-full bg-current transition-all duration-300 ease-out', menuAbierto ? '-rotate-45' : 'translate-y-[6px]')} />
+              </span>
+              <ActivoIcon className="h-4 w-4 shrink-0" />
+              <span className="text-sm font-semibold">{activo.label}</span>
+            </button>
+
+            {/* Panel desplegable (absoluto: no empuja el contenido) */}
+            <div
+              className={cn(
+                'absolute inset-x-0 z-30 grid overflow-hidden transition-[grid-template-rows,opacity] duration-300 ease-out',
+                menuAbierto ? 'grid-rows-[1fr] opacity-100' : 'pointer-events-none grid-rows-[0fr] opacity-0'
+              )}
+            >
+              <div className="min-h-0">
+                <div className="mt-2 flex flex-col gap-1 rounded-2xl border border-purple-200/50 bg-white/95 p-2 shadow-2xl backdrop-blur-xl dark:border-purple-900/30 dark:bg-[#1a1025]/95">
+                  {TABS.map((t, i) => (
+                    <button
+                      key={t.v}
+                      onClick={() => { setVista(t.v); setMenuAbierto(false); }}
+                      style={{ transitionDelay: menuAbierto ? `${60 + i * 45}ms` : '0ms' }}
+                      className={cn(
+                        'flex items-center gap-2.5 rounded-xl px-3 py-3 text-sm font-medium transition-all duration-300',
+                        menuAbierto ? 'translate-y-0 opacity-100' : '-translate-y-1 opacity-0',
+                        vista === t.v
+                          ? 'bg-gradient-to-br from-purple-500 to-fuchsia-500 text-white shadow'
+                          : 'text-purple-700 hover:bg-purple-500/10 dark:text-purple-200'
+                      )}
+                    >
+                      <t.Icon className="h-4 w-4 shrink-0" />
+                      {t.label}
+                      {vista === t.v && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-white/90" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </header>
 
