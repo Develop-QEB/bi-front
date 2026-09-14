@@ -559,6 +559,7 @@ export function VariacionesPage() {
 
   const [ventaTotal, setVentaTotal] = useState<number | null>(null);
   const [ventaPrev, setVentaPrev] = useState<number | null>(null); // período inmediato anterior (para ▲/▼)
+  const [ventasPeriodo, setVentasPeriodo] = useState<Record<number, number>>({}); // venta V_APS por período (línea del chart)
 
   useEffect(() => {
     getImpacto(anio).then(setImp).catch(() => setError(true));
@@ -585,6 +586,12 @@ export function VariacionesPage() {
     if (uno && uno.v > 1) {
       getVentaTotal({ ...base, [uno.key]: [uno.v - 1] }).then(setVentaPrev).catch(() => setVentaPrev(null));
     }
+
+    // Venta real V_APS por período (para la línea de "Venta neta total" del chart).
+    const uni = granularidad === 'anio' ? 'mes' : granularidad;
+    getVentasPeriodo(uni as Periodo, { ...base, ...per })
+      .then((rows) => setVentasPeriodo(Object.fromEntries(rows.map((r) => [r.periodo, r.monto]))))
+      .catch(() => setVentasPeriodo({}));
   }, [anio, granularidad, mesesSel, catsSel, semsSel, plaza, formato, mueble, cliente, asesor]);
 
   // Opciones de los dropdowns, derivadas del universo de ediciones del año.
@@ -693,9 +700,14 @@ export function VariacionesPage() {
     if (v > 0) x.alzas += v; else if (v < 0) x.bajas += v;
     porPeriodo.set(b, x);
   }
-  const barrasMes = [...porPeriodo.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([b, v]) => ({ mes: etiquetaBucket(b), alzas: v.alzas, bajas: v.bajas, neta: v.alzas + v.bajas }));
+  // Unión de períodos: los que tienen ediciones + los que tienen venta V_APS.
+  const clavesPeriodo = [...new Set<number>([...porPeriodo.keys(), ...Object.keys(ventasPeriodo).map(Number)])]
+    .filter((b) => Number.isFinite(b) && b > 0)
+    .sort((a, b) => a - b);
+  const barrasMes = clavesPeriodo.map((b) => {
+    const v = porPeriodo.get(b) ?? { alzas: 0, bajas: 0 };
+    return { mes: etiquetaBucket(b), alzas: v.alzas, bajas: v.bajas, neta: v.alzas + v.bajas, ventaTotal: ventasPeriodo[b] ?? 0 };
+  });
   const filas = fil;
 
   // Clientes con más ajuste (variación neta absoluta).
@@ -849,24 +861,26 @@ export function VariacionesPage() {
 
       <div className={CARD}>
         <CardTitle>Variación de inversión por {unidad}</CardTitle>
-        <p className="-mt-1 mb-2 text-[11px] text-zinc-400">Alzas y bajas según la fecha de la edición; la línea es el efecto neto</p>
+        <p className="-mt-1 mb-2 text-[11px] text-zinc-400">Ediciones del período (izq.) vs venta real V_APS del período (der.)</p>
         <ResponsiveContainer width="100%" height={300}>
-          <ComposedChart data={barrasMes} stackOffset="sign" margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+          <ComposedChart data={barrasMes} stackOffset="sign" margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
             <CartesianGrid stroke={ink.grid} vertical={false} />
             <XAxis dataKey="mes" tick={{ fill: ink.axis, fontSize: 11 }} tickLine={false} axisLine={false} />
-            <YAxis tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
+            <YAxis yAxisId="var" tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
+            <YAxis yAxisId="venta" orientation="right" tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
             <Tooltip cursor={{ fill: ink.cursor }} content={
               <TooltipChart format={(v) => `${v >= 0 ? '+' : ''}${formatCurrency(v)}`} />
             } />
             <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ fontSize: 11, paddingBottom: 8 }} />
-            <ReferenceLine y={0} stroke={ink.axis} />
-            <Bar dataKey="alzas" name="Alzas" stackId="v" fill="#22c55e" radius={[3, 3, 0, 0]} maxBarSize={46} />
-            <Bar dataKey="bajas" name="Bajas" stackId="v" fill="#f43f5e" radius={[0, 0, 3, 3]} maxBarSize={46} />
-            <Line type="monotone" dataKey="neta" name="Neta" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3, fill: '#f59e0b', stroke: '#f59e0b' }} activeDot={{ r: 5 }} />
+            <ReferenceLine yAxisId="var" y={0} stroke={ink.axis} />
+            <Bar yAxisId="var" dataKey="alzas" name="Alzas" stackId="v" fill="#22c55e" radius={[3, 3, 0, 0]} maxBarSize={46} />
+            <Bar yAxisId="var" dataKey="bajas" name="Bajas" stackId="v" fill="#f43f5e" radius={[0, 0, 3, 3]} maxBarSize={46} />
+            <Line yAxisId="var" type="monotone" dataKey="neta" name="Neta (ediciones)" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3, fill: '#f59e0b', stroke: '#f59e0b' }} activeDot={{ r: 5 }} />
+            <Line yAxisId="venta" type="monotone" dataKey="ventaTotal" name="Venta neta total (V_APS)" stroke="#0ea5e9" strokeWidth={2.5} strokeDasharray="5 3" dot={{ r: 3, fill: '#0ea5e9', stroke: '#0ea5e9' }} activeDot={{ r: 5 }} />
           </ComposedChart>
         </ResponsiveContainer>
         <p className="mt-1 text-center text-[11px] text-zinc-400">
-          Verde arriba = subió inversión · rojo abajo = bajó · la línea ámbar (Neta) es el efecto neto del período (alzas + bajas)
+          Barras verde/rojo = alzas/bajas de ediciones · línea ámbar (Neta) = efecto neto de las ediciones (eje izq.) · línea azul = Venta neta total real V_APS del período (eje der., la base a comparar)
         </p>
       </div>
 
