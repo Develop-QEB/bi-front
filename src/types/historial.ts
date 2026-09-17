@@ -38,6 +38,7 @@ export interface EventoHistorial {
   cliente?: string | null;
   asesor?: string | null;
   marca?: string | null;
+  status?: string | null;
   plazas?: string[];
   formatos?: string[];
   muebles?: string[];

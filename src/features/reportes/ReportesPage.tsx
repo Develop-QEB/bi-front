@@ -616,6 +616,7 @@ export function VariacionesPage() {
   const [clientesSel, setClientesSel] = useState<string[]>([]);   // multi + búsqueda
   const [campaniasSel, setCampaniasSel] = useState<string[]>([]); // multi + búsqueda
   const [marcasSel, setMarcasSel] = useState<string[]>([]);       // multi + búsqueda
+  const [statusSel, setStatusSel] = useState<string[]>([]);       // estatus (ventas/pase a ventas)
   const [idCampania, setIdCampania] = useState('');               // filtro por ID (texto)
   const [campoFiltro, setCampoFiltro] = useState<'todos' | 'caras' | 'monto'>('todos');
   const [direccion, setDireccion] = useState<'todas' | 'alzas' | 'bajas'>('todas');
@@ -676,6 +677,7 @@ export function VariacionesPage() {
       asesores: uniq((e) => [e.asesor]),
       campanias: uniq((e) => [e.campania]),
       marcas: uniq((e) => [e.marca]),
+      status: uniq((e) => [e.status]),
     };
   }, [imp]);
 
@@ -701,7 +703,7 @@ export function VariacionesPage() {
 
   const limpiar = () => {
     setGranularidad('mes'); setMesesSel([]); setSemsSel([]); setCatsSel([]); setPlaza(''); setFormato(''); setMueble('');
-    setClientesSel([]); setCampaniasSel([]); setMarcasSel([]); setIdCampania(''); setAsesor(''); setCampoFiltro('todos'); setDireccion('todas');
+    setClientesSel([]); setCampaniasSel([]); setMarcasSel([]); setStatusSel([]); setIdCampania(''); setAsesor(''); setCampoFiltro('todos'); setDireccion('todas');
   };
 
   // Filtros: período, plaza/formato/mueble/asesor, cliente/campaña/marca (multi),
@@ -716,6 +718,7 @@ export function VariacionesPage() {
     if (clientesSel.length && !(e.cliente && clientesSel.includes(e.cliente))) return false;
     if (campaniasSel.length && !(e.campania && campaniasSel.includes(e.campania))) return false;
     if (marcasSel.length && !(e.marca && marcasSel.includes(e.marca))) return false;
+    if (statusSel.length && !(e.status && statusSel.includes(e.status))) return false;
     if (idq && !String(e.refId ?? '').includes(idq)) return false;
     if (asesor && e.asesor !== asesor) return false;
     if (granularidad === 'mes' && mesesSel.length && !mesesSel.includes(new Date(e.fecha).getMonth() + 1)) return false;
@@ -888,7 +891,7 @@ export function VariacionesPage() {
     : granularidad === 'semana' ? semsSel.map((w) => `Sem ${w}`) : [];
   const chipsActivos = [
     ...periodoLabels, plaza, formato, mueble, asesor,
-    ...clientesSel, ...campaniasSel, ...marcasSel, idq ? `ID ${idq}` : '',
+    ...clientesSel, ...campaniasSel, ...marcasSel, ...statusSel, idq ? `ID ${idq}` : '',
     campoFiltro !== 'todos' ? campoFiltro : '', direccion !== 'todas' ? direccion : '',
   ].filter(Boolean) as string[];
   const resumenFiltros = chipsActivos.length
@@ -925,6 +928,7 @@ export function VariacionesPage() {
           <MultiSelectStr label="Cliente" opciones={opciones.clientes} sel={clientesSel} onChange={setClientesSel} />
           <MultiSelectStr label="Campaña" opciones={opciones.campanias} sel={campaniasSel} onChange={setCampaniasSel} />
           <MultiSelectStr label="Marca" opciones={opciones.marcas} sel={marcasSel} onChange={setMarcasSel} />
+          <MultiSelectStr label="Estatus" opciones={opciones.status} sel={statusSel} onChange={setStatusSel} />
           <label className="flex w-full items-center gap-1.5 text-xs sm:w-auto">
             <span className="w-24 shrink-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400 sm:w-auto">ID campaña</span>
             <input value={idCampania} onChange={(e) => setIdCampania(e.target.value)} inputMode="numeric" placeholder="Ej. 81220"
