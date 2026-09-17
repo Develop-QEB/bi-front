@@ -16,8 +16,8 @@ import { chartInk } from '../../lib/chartTheme';
 import { useThemeStore } from '../../store/themeStore';
 import { getAsesores, getResumenVentas } from '../../services/resumenVentas.service';
 import { getImpacto } from '../../services/historial.service';
-import { getCampanias, getCatorcenas, getCiclo, getDistribucion, getEmbudo, getOpciones, getVentasPeriodo, getVentaTotal } from '../../services/reportes.service';
-import type { CatorcenaCal } from '../../services/reportes.service';
+import { getCampanias, getCatorcenas, getCiclo, getDistribucion, getEmbudo, getOpciones, getTarifas, getVentasPeriodo, getVentaTotal } from '../../services/reportes.service';
+import type { CatorcenaCal, Tarifas } from '../../services/reportes.service';
 import { asesorObjetivoDe, objetivoAnual, objetivoDe, useObjetivosStore } from '../../store/objetivosStore';
 import type { ResumenVentas } from '../../types/bi';
 import type { CampaniaDetalle, Ciclo, ConteoMonto, Embudo, EtapaEmbudo, FiltrosReporte, Impacto, OpcionesReporte, Periodo } from '../../types/reportes';
@@ -138,6 +138,7 @@ export function EmbudoPage() {
   const [cliente, setCliente] = useState<ConteoMonto[]>([]);
   const [asesor, setAsesor] = useState<ConteoMonto[]>([]);
   const [porMes, setPorMes] = useState<{ etiqueta: string; monto: number; caras: number }[]>([]);
+  const [tarifas, setTarifas] = useState<Tarifas | null>(null);
   const [error, setError] = useState(false);
 
   const [statusFiltro, setStatusFiltro] = useState<'todos' | 'activas' | 'finalizadas'>('todos');
@@ -174,6 +175,7 @@ export function EmbudoPage() {
         const map = new Map(rows.map((r) => [r.periodo, r]));
         setPorMes(MESES.map((etiqueta, i) => ({ etiqueta, monto: map.get(i + 1)?.monto ?? 0, caras: map.get(i + 1)?.caras ?? 0 })));
       }).catch(() => {}),
+      getTarifas(f).then(setTarifas).catch(() => setTarifas(null)),
     ]).catch(() => setError(true));
   }, [filtros, cargarObj, tick]);
 
@@ -274,6 +276,18 @@ export function EmbudoPage() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Tarifas promedio (efectiva vs pública) */}
+      <div className={CARD}>
+        <CardTitle>Tarifas promedio</CardTitle>
+        <p className="-mt-1 mb-3 text-[11px] text-zinc-400">Promedio por cara según el alcance filtrado</p>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <MetricCard titulo="Tarifa pública prom." valor={tarifas ? formatCurrency(tarifas.publica) : '…'} sub="Precio de lista por cara" tono="neutral" accent={ACCENTS[0]} />
+          <MetricCard titulo="Tarifa efectiva prom." valor={tarifas ? formatCurrency(tarifas.efectiva) : '…'} sub="Realmente cobrado por cara" tono="up" accent={ACCENTS[2]} />
+          <MetricCard titulo="Descuento promedio" valor={tarifas ? `${tarifas.descuentoPct.toFixed(1)}%` : '…'} sub="Pública → efectiva" tono={tarifas && tarifas.descuentoPct > 0 ? 'down' : 'neutral'} accent={ACCENTS[4]} />
+          <MetricCard titulo="Caras (base)" valor={tarifas ? nf(tarifas.caras) : '…'} sub="Caras del alcance" tono="neutral" accent={ACCENTS[3]} />
+        </div>
       </div>
 
       {/* Detalle de campañas */}
@@ -494,6 +508,49 @@ function MultiSelect({ label, opciones, sel, onChange }: { label: string; opcion
   );
 }
 
+// Multi-selección de TEXTO con buscador (cliente, campaña, marca…).
+function MultiSelectStr({ label, opciones, sel, onChange }: { label: string; opciones: string[]; sel: string[]; onChange: (s: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: PointerEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('pointerdown', h);
+    return () => document.removeEventListener('pointerdown', h);
+  }, [open]);
+  const toggle = (v: string) => onChange(sel.includes(v) ? sel.filter((x) => x !== v) : [...sel, v]);
+  const resumen = sel.length === 0 ? 'Todos' : sel.length === 1 ? sel[0] : `${sel.length} seleccionados`;
+  const filtradas = q ? opciones.filter((o) => o.toLowerCase().includes(q.toLowerCase())) : opciones;
+  return (
+    <div ref={ref} className="relative flex w-full items-center gap-1.5 text-xs sm:w-auto">
+      <span className="w-24 shrink-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400 sm:w-auto">{label}</span>
+      <button type="button" onClick={() => setOpen((v) => !v)} className="flex min-w-0 flex-1 items-center justify-between gap-1 rounded-lg border border-purple-200/60 bg-white/80 px-2 py-1.5 text-xs text-zinc-700 shadow-sm outline-none focus:border-purple-400 dark:border-purple-900/40 dark:bg-[#241633] dark:text-zinc-200 sm:max-w-[190px] sm:flex-none sm:py-1">
+        <span className="truncate">{resumen}</span>
+        <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-40 mt-1 w-64 rounded-lg border border-purple-200/60 bg-white p-1 shadow-2xl dark:border-purple-900/40 dark:bg-[#241633]">
+          <input
+            autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar…"
+            className="mb-1 w-full rounded-md border border-purple-200/60 bg-white/80 px-2 py-1.5 text-xs outline-none focus:border-purple-400 dark:border-purple-900/40 dark:bg-[#1a1025] dark:text-zinc-200"
+          />
+          <button onClick={() => onChange([])} className="w-full px-2 py-1 text-left text-[11px] text-purple-600 hover:underline dark:text-purple-300">Limpiar (todos)</button>
+          <div className="max-h-56 overflow-auto">
+            {filtradas.slice(0, 200).map((v) => (
+              <label key={v} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs text-zinc-700 hover:bg-purple-500/10 dark:text-zinc-200">
+                <input type="checkbox" checked={sel.includes(v)} onChange={() => toggle(v)} className="accent-purple-600" />
+                <span className="truncate">{v}</span>
+              </label>
+            ))}
+            {!filtradas.length && <p className="px-2 py-2 text-[11px] text-zinc-400">Sin coincidencias</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Contenedor de la barra de filtros: pegado (sticky) al hacer scroll en todos los
 // tamaños; colapsable en móvil (muestra un resumen de filtros activos).
 function BarraFiltros({ children, resumen }: { children: ReactNode; resumen?: ReactNode }) {
@@ -555,11 +612,13 @@ export function VariacionesPage() {
   const [plaza, setPlaza] = useState('');
   const [formato, setFormato] = useState('');
   const [mueble, setMueble] = useState('');
-  const [cliente, setCliente] = useState('');
   const [asesor, setAsesor] = useState('');
+  const [clientesSel, setClientesSel] = useState<string[]>([]);   // multi + búsqueda
+  const [campaniasSel, setCampaniasSel] = useState<string[]>([]); // multi + búsqueda
+  const [marcasSel, setMarcasSel] = useState<string[]>([]);       // multi + búsqueda
+  const [idCampania, setIdCampania] = useState('');               // filtro por ID (texto)
   const [campoFiltro, setCampoFiltro] = useState<'todos' | 'caras' | 'monto'>('todos');
   const [direccion, setDireccion] = useState<'todas' | 'alzas' | 'bajas'>('todas');
-  const [entidad, setEntidad] = useState<'todos' | 'Solicitud' | 'Propuesta' | 'Campaña'>('todos');
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const ink = chartInk(isDark);
 
@@ -578,7 +637,9 @@ export function VariacionesPage() {
   // período inmediato anterior (solo cuando hay un único período seleccionado).
   useEffect(() => {
     setVentaTotal(null); setVentaPrev(null);
-    const base = { anio, plaza: plaza || null, formato: formato || null, mueble: mueble || null, cliente: cliente || null, asesor: asesor || null };
+    // V_APS filtra por cliente único; si hay varios, la venta total muestra todos.
+    const clienteUnico = clientesSel.length === 1 ? clientesSel[0] : null;
+    const base = { anio, plaza: plaza || null, formato: formato || null, mueble: mueble || null, cliente: clienteUnico, asesor: asesor || null };
     const per: Partial<FiltrosReporte> =
       granularidad === 'mes' ? { meses: mesesSel }
       : granularidad === 'catorcena' ? { catorcenas: catsSel }
@@ -600,7 +661,7 @@ export function VariacionesPage() {
     getVentasPeriodo(uni as Periodo, { ...base, ...per })
       .then((rows) => setVentasPeriodo(Object.fromEntries(rows.map((r) => [r.periodo, r.monto]))))
       .catch(() => setVentasPeriodo({}));
-  }, [anio, granularidad, mesesSel, catsSel, semsSel, plaza, formato, mueble, cliente, asesor, tick]);
+  }, [anio, granularidad, mesesSel, catsSel, semsSel, plaza, formato, mueble, clientesSel, asesor, tick]);
 
   // Opciones de los dropdowns, derivadas del universo de ediciones del año.
   const opciones = useMemo(() => {
@@ -613,16 +674,14 @@ export function VariacionesPage() {
       muebles: uniq((e) => e.muebles ?? []),
       clientes: uniq((e) => [e.cliente]),
       asesores: uniq((e) => [e.asesor]),
+      campanias: uniq((e) => [e.campania]),
+      marcas: uniq((e) => [e.marca]),
     };
   }, [imp]);
 
   if (error) return <p className="text-sm text-rose-500">No se pudo cargar el impacto.</p>;
   if (!imp) return <div className="flex h-64 items-center justify-center"><Spinner size="lg" /></div>;
 
-  const entidadDe = (t: string) => {
-    const s = (t || '').toLowerCase();
-    return s.includes('campañ') || s.includes('campan') ? 'Campaña' : s.includes('propuesta') ? 'Propuesta' : s.includes('solicitud') ? 'Solicitud' : 'Otro';
-  };
   const signo = (e: Impacto['ediciones'][number]) => ((e.monto ?? 0) !== 0 ? (e.monto ?? 0) : e.caras);
 
   // Semanas ISO presentes en las ediciones del año (para el dropdown de Semana).
@@ -642,19 +701,22 @@ export function VariacionesPage() {
 
   const limpiar = () => {
     setGranularidad('mes'); setMesesSel([]); setSemsSel([]); setCatsSel([]); setPlaza(''); setFormato(''); setMueble('');
-    setCliente(''); setAsesor(''); setCampoFiltro('todos'); setDireccion('todas'); setEntidad('todos');
+    setClientesSel([]); setCampaniasSel([]); setMarcasSel([]); setIdCampania(''); setAsesor(''); setCampoFiltro('todos'); setDireccion('todas');
   };
 
-  // Filtros del jefe: granularidad/mes, plaza/formato/mueble/cliente/asesor
-  // (aproximado por campaña), campo editado, dirección y entidad.
+  // Filtros: período, plaza/formato/mueble/asesor, cliente/campaña/marca (multi),
+  // ID de campaña, campo editado y dirección.
+  const idq = idCampania.trim();
   const fil = imp.ediciones.filter((e) => {
     if (campoFiltro === 'caras' && e.carasAntes == null) return false;
     if (campoFiltro === 'monto' && !(e.invAntes != null || (e.monto ?? 0) !== 0)) return false;
-    if (entidad !== 'todos' && entidadDe(e.tipo) !== entidad) return false;
     if (plaza && !(e.plazas ?? []).includes(plaza)) return false;
     if (formato && !(e.formatos ?? []).includes(formato)) return false;
     if (mueble && !(e.muebles ?? []).includes(mueble)) return false;
-    if (cliente && e.cliente !== cliente) return false;
+    if (clientesSel.length && !(e.cliente && clientesSel.includes(e.cliente))) return false;
+    if (campaniasSel.length && !(e.campania && campaniasSel.includes(e.campania))) return false;
+    if (marcasSel.length && !(e.marca && marcasSel.includes(e.marca))) return false;
+    if (idq && !String(e.refId ?? '').includes(idq)) return false;
     if (asesor && e.asesor !== asesor) return false;
     if (granularidad === 'mes' && mesesSel.length && !mesesSel.includes(new Date(e.fecha).getMonth() + 1)) return false;
     if (granularidad === 'semana' && semsSel.length && !semsSel.includes(isoWeek(new Date(e.fecha)))) return false;
@@ -825,8 +887,9 @@ export function VariacionesPage() {
     : granularidad === 'catorcena' ? catsSel.map((c) => `Cat ${c}`)
     : granularidad === 'semana' ? semsSel.map((w) => `Sem ${w}`) : [];
   const chipsActivos = [
-    ...periodoLabels, plaza, formato, mueble, cliente, asesor,
-    campoFiltro !== 'todos' ? campoFiltro : '', direccion !== 'todas' ? direccion : '', entidad !== 'todos' ? entidad : '',
+    ...periodoLabels, plaza, formato, mueble, asesor,
+    ...clientesSel, ...campaniasSel, ...marcasSel, idq ? `ID ${idq}` : '',
+    campoFiltro !== 'todos' ? campoFiltro : '', direccion !== 'todas' ? direccion : '',
   ].filter(Boolean) as string[];
   const resumenFiltros = chipsActivos.length
     ? chipsActivos.slice(0, 2).join(', ') + (chipsActivos.length > 2 ? ` +${chipsActivos.length - 2}` : '')
@@ -858,8 +921,15 @@ export function VariacionesPage() {
           <SelectBox label="Plaza" valor={plaza} opciones={conTodos(opciones.plazas)} onSel={setPlaza} />
           <SelectBox label="Formato" valor={formato} opciones={conTodos(opciones.formatos)} onSel={setFormato} />
           <SelectBox label="Tipo de mueble" valor={mueble} opciones={conTodos(opciones.muebles)} onSel={setMueble} />
-          <SelectBox label="Cliente" valor={cliente} opciones={conTodos(opciones.clientes)} onSel={setCliente} />
           <SelectBox label="Asesor" valor={asesor} opciones={conTodos(opciones.asesores)} onSel={setAsesor} />
+          <MultiSelectStr label="Cliente" opciones={opciones.clientes} sel={clientesSel} onChange={setClientesSel} />
+          <MultiSelectStr label="Campaña" opciones={opciones.campanias} sel={campaniasSel} onChange={setCampaniasSel} />
+          <MultiSelectStr label="Marca" opciones={opciones.marcas} sel={marcasSel} onChange={setMarcasSel} />
+          <label className="flex w-full items-center gap-1.5 text-xs sm:w-auto">
+            <span className="w-24 shrink-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400 sm:w-auto">ID campaña</span>
+            <input value={idCampania} onChange={(e) => setIdCampania(e.target.value)} inputMode="numeric" placeholder="Ej. 81220"
+              className="min-w-0 flex-1 rounded-lg border border-purple-200/60 bg-white/80 px-2 py-1.5 text-xs text-zinc-700 shadow-sm outline-none focus:border-purple-400 dark:border-purple-900/40 dark:bg-[#241633] dark:text-zinc-200 sm:max-w-[110px] sm:py-1" />
+          </label>
           <button onClick={limpiar} className="rounded-lg border border-purple-200/60 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-500/10 dark:border-purple-900/40 dark:text-purple-200">
             Limpiar
           </button>
@@ -873,57 +943,24 @@ export function VariacionesPage() {
             <span className="text-xs text-zinc-500 dark:text-zinc-400">Dirección</span>
             <FiltroGrupo opciones={[['todas', 'Todas'], ['alzas', 'Alzas'], ['bajas', 'Bajas']]} valor={direccion} onSel={(v) => setDireccion(v as typeof direccion)} />
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">Entidad</span>
-            <FiltroGrupo opciones={[['todos', 'Todos'], ['Solicitud', 'Solicitud'], ['Propuesta', 'Propuesta'], ['Campaña', 'Campaña']]} valor={entidad} onSel={(v) => setEntidad(v as typeof entidad)} />
-          </div>
         </div>
         <p className="text-[11px] text-zinc-400">
           Plaza · Formato · Tipo de mueble corresponden a las caras exactas que se editaron en cada registro (por circuito/cara del historial).
         </p>
       </BarraFiltros>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-        {kpis.map((k) => (
-          <MetricCard key={k.titulo} titulo={k.titulo} valor={k.valor} sub={k.sub} tono={k.tono} accent={k.accent} />
-        ))}
-      </div>
-
-      <div className={CARD}>
-        <CardTitle>Variación de inversión por {unidad}</CardTitle>
-        <p className="-mt-1 mb-2 text-[11px] text-zinc-400">Ediciones del período (izq.) vs venta acumulada del período (der.)</p>
-        <ResponsiveContainer width="100%" height={300}>
-          <ComposedChart data={barrasMes} stackOffset="sign" margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
-            <CartesianGrid stroke={ink.grid} vertical={false} />
-            <XAxis dataKey="mes" tick={{ fill: ink.axis, fontSize: 11 }} tickLine={false} axisLine={false} />
-            <YAxis yAxisId="var" tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
-            <YAxis yAxisId="venta" orientation="right" tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
-            <Tooltip cursor={{ fill: ink.cursor }} content={
-              <TooltipChart format={(v, n) => (n.includes('Venta') ? formatCurrency(v) : `${v >= 0 ? '+' : ''}${formatCurrency(v)}`)} />
-            } />
-            <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ fontSize: 11, paddingBottom: 8 }} />
-            <ReferenceLine yAxisId="var" y={0} stroke={ink.axis} />
-            <Bar yAxisId="var" dataKey="alzas" name="Alzas" stackId="v" fill="#22c55e" radius={[3, 3, 0, 0]} maxBarSize={46} />
-            <Bar yAxisId="var" dataKey="bajas" name="Bajas" stackId="v" fill="#f43f5e" radius={[0, 0, 3, 3]} maxBarSize={46} />
-            <Line yAxisId="var" type="monotone" dataKey="neta" name="Neta (ediciones)" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3, fill: '#f59e0b', stroke: '#f59e0b' }} activeDot={{ r: 5 }} />
-            <Line yAxisId="venta" type="monotone" dataKey="ventaTotal" name="Venta acumulada por período" stroke="#0ea5e9" strokeWidth={2.5} strokeDasharray="5 3" dot={{ r: 3, fill: '#0ea5e9', stroke: '#0ea5e9' }} activeDot={{ r: 5 }} />
-          </ComposedChart>
-        </ResponsiveContainer>
-        <p className="mt-1 text-center text-[11px] text-zinc-400">
-          Barras verde/rojo = alzas/bajas de ediciones · línea ámbar (Neta) = efecto neto de las ediciones (eje izq.) · línea azul = Venta acumulada por período (eje der., la base a comparar)
-        </p>
-      </div>
-
+      {/* Historial de ediciones (movido hasta arriba) */}
       <div className={CARD}>
         <div className="mb-3">
           <CardTitle>Historial de ediciones</CardTitle>
-          <p className="-mt-1 text-[11px] text-zinc-400">Audit log con campaña, quién editó y el impacto en inversión · {filas.length} registros</p>
+          <p className="-mt-1 text-[11px] text-zinc-400">Audit log con campaña, tipo, quién editó y el impacto en inversión · {filas.length} registros</p>
         </div>
         <div className="max-h-[460px] overflow-auto">
-          <table className="w-full min-w-[720px] text-sm">
+          <table className="w-full min-w-[760px] text-sm">
             <thead className="sticky top-0 bg-white/90 dark:bg-[#1a1025]/90">
               <tr className="text-left text-xs text-zinc-400">
                 <th className="py-1 pr-2">Fecha</th>
+                <th className="py-1 pr-2">Tipo</th>
                 <th className="py-1 pr-2">Campaña</th>
                 <th className="py-1 pr-2">Usuario</th>
                 <th className="py-1 pr-2">Campo</th>
@@ -940,6 +977,7 @@ export function VariacionesPage() {
                 return (
                   <tr key={e.id} className="border-t border-purple-100/40 dark:border-purple-900/20">
                     <td className="py-1.5 pr-2 text-xs text-zinc-500">{new Date(e.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}</td>
+                    <td className="py-1.5 pr-2"><span className={cn('whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-medium', tipoBadge(e.tipoEdicion))}>{e.tipoEdicion ?? '—'}</span></td>
                     <td className="max-w-[150px] truncate py-1.5 pr-2 font-medium text-zinc-700 dark:text-zinc-200">{e.campania ?? '—'}</td>
                     <td className="max-w-[130px] truncate py-1.5 pr-2 text-zinc-500 dark:text-zinc-400">{e.usuario ?? '—'}</td>
                     <td className="py-1.5 pr-2">
@@ -968,10 +1006,83 @@ export function VariacionesPage() {
                   </tr>
                 );
               })}
-              {!filas.length && <tr><td colSpan={7} className="py-6 text-center text-xs text-zinc-400">Sin ediciones en el período</td></tr>}
+              {!filas.length && <tr><td colSpan={8} className="py-6 text-center text-xs text-zinc-400">Sin ediciones en el período</td></tr>}
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        {kpis.map((k) => (
+          <MetricCard key={k.titulo} titulo={k.titulo} valor={k.valor} sub={k.sub} tono={k.tono} accent={k.accent} />
+        ))}
+      </div>
+
+      <div className={CARD}>
+        <CardTitle>Variación de inversión por {unidad}</CardTitle>
+        <p className="-mt-1 mb-2 text-[11px] text-zinc-400">Alzas y bajas de ediciones; la línea ámbar es el efecto neto</p>
+        <ResponsiveContainer width="100%" height={300}>
+          <ComposedChart data={barrasMes} stackOffset="sign" margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
+            <CartesianGrid stroke={ink.grid} vertical={false} />
+            <XAxis dataKey="mes" tick={{ fill: ink.axis, fontSize: 11 }} tickLine={false} axisLine={false} />
+            <YAxis tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
+            <Tooltip cursor={{ fill: ink.cursor }} content={
+              <TooltipChart format={(v) => `${v >= 0 ? '+' : ''}${formatCurrency(v)}`} />
+            } />
+            <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ fontSize: 11, paddingBottom: 8 }} />
+            <ReferenceLine y={0} stroke={ink.axis} />
+            <Bar dataKey="alzas" name="Alzas" stackId="v" fill="#22c55e" radius={[3, 3, 0, 0]} maxBarSize={46} />
+            <Bar dataKey="bajas" name="Bajas" stackId="v" fill="#f43f5e" radius={[0, 0, 3, 3]} maxBarSize={46} />
+            <Line type="monotone" dataKey="neta" name="Neta (ediciones)" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3, fill: '#f59e0b', stroke: '#f59e0b' }} activeDot={{ r: 5 }} />
+          </ComposedChart>
+        </ResponsiveContainer>
+        <p className="mt-1 text-center text-[11px] text-zinc-400">
+          Verde arriba = subió inversión · rojo abajo = bajó · línea ámbar (Neta) = efecto neto del período (alzas + bajas)
+        </p>
+      </div>
+
+      {/* Cómo se movió la venta acumulada (debajo de "Variación de inversión") */}
+      <div className={CARD}>
+        <CardTitle>Cómo se movió la venta acumulada por {unidad}</CardTitle>
+        <p className="-mt-1 mb-3 text-[11px] text-zinc-400">
+          Cuánto valía en cada {unidad}. No guardamos el total por período, pero las ediciones (alzas/bajas) lo mueven:
+          partimos del valor de hoy y aplicamos las variaciones para reconstruir la trayectoria.
+        </p>
+        <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <MetricCard titulo="Valor al inicio" valor={formatCurrency(valorInicio)} sub={fechaBaseIni ? `${fmtFecha(fechaBaseIni)}` : 'Inicio del período'} tono="neutral" accent={ACCENTS[0]} />
+          <MetricCard titulo="Δ por caras" valor={`${aporteCaras >= 0 ? '+' : ''}${formatCurrency(aporteCaras)}`} sub={`${pctInicio(aporteCaras).toFixed(1)}% del valor inicial`} tono={aporteCaras >= 0 ? 'up' : 'down'} accent={ACCENTS[1]} />
+          <MetricCard titulo="Δ por tarifa" valor={`${aporteTarifa >= 0 ? '+' : ''}${formatCurrency(aporteTarifa)}`} sub={`${pctInicio(aporteTarifa).toFixed(1)}% del valor inicial`} tono={aporteTarifa >= 0 ? 'up' : 'down'} accent={ACCENTS[2]} />
+          <MetricCard titulo="Venta acumulada hoy" valor={formatCurrency(anchorTotal)} sub={`${pctInicio(D) >= 0 ? '▲ +' : '▼ '}${pctInicio(D).toFixed(1)}% vs inicio`} tono={D >= 0 ? 'up' : 'down'} accent={ACCENTS[3]} />
+        </div>
+        <ResponsiveContainer width="100%" height={280}>
+          <ComposedChart data={trayectoria} margin={{ top: 12, right: 12, left: 0, bottom: 4 }}>
+            <defs>
+              <linearGradient id="gradTray" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke={ink.grid} vertical={false} />
+            <XAxis dataKey="etiqueta" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
+            <YAxis domain={domY} tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
+            <Tooltip content={
+              <TooltipChart
+                format={(v, _n, p) => {
+                  const d = p && typeof p.delta === 'number' ? (p.delta as number) : 0;
+                  const pct = p && typeof p.pct === 'number' ? (p.pct as number) : null;
+                  if (d === 0) return formatCurrency(v);
+                  const flecha = d > 0 ? '▲ +' : '▼ ';
+                  const pctTxt = pct != null ? ` · ${flecha}${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%` : ` · ${d > 0 ? '+' : ''}`;
+                  return `${formatCurrency(v)} (${d > 0 ? '+' : ''}${formatCurrency(d)}${pctTxt})`;
+                }}
+              />
+            } />
+            <Area type="monotone" dataKey="total" name="Venta acumulada" stroke="#8b5cf6" strokeWidth={2.5} fill="url(#gradTray)" dot={{ r: 3, fill: '#8b5cf6' }} activeDot={{ r: 5 }} />
+          </ComposedChart>
+        </ResponsiveContainer>
+        <p className="mt-1 text-[11px] text-zinc-400">
+          Valor acumulado por {unidad}: baja los períodos con más bajas y sube los que tienen más alzas, hasta el valor de hoy. Pasa el mouse por cada punto para ver el cambio ($ y %).
+        </p>
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
@@ -1016,53 +1127,10 @@ export function VariacionesPage() {
         </div>
       </div>
 
-      {/* Cómo se movió la venta acumulada (valor del período reconstruido día a día) */}
+      {/* Análisis gráfico: variación neta por asesor + por plaza */}
       <div>
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-zinc-400">Análisis gráfico</p>
-        <div className={CARD}>
-          <CardTitle>Cómo se movió la venta acumulada por {unidad}</CardTitle>
-          <p className="-mt-1 mb-3 text-[11px] text-zinc-400">
-            Cuánto valía en cada {unidad}. No guardamos el total por período, pero las ediciones (alzas/bajas) lo mueven:
-            partimos del valor de hoy y aplicamos las variaciones para reconstruir la trayectoria.
-          </p>
-          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <MetricCard titulo="Valor al inicio" valor={formatCurrency(valorInicio)} sub={fechaBaseIni ? `${fmtFecha(fechaBaseIni)}` : 'Inicio del período'} tono="neutral" accent={ACCENTS[0]} />
-            <MetricCard titulo="Δ por caras" valor={`${aporteCaras >= 0 ? '+' : ''}${formatCurrency(aporteCaras)}`} sub={`${pctInicio(aporteCaras).toFixed(1)}% del valor inicial`} tono={aporteCaras >= 0 ? 'up' : 'down'} accent={ACCENTS[1]} />
-            <MetricCard titulo="Δ por tarifa" valor={`${aporteTarifa >= 0 ? '+' : ''}${formatCurrency(aporteTarifa)}`} sub={`${pctInicio(aporteTarifa).toFixed(1)}% del valor inicial`} tono={aporteTarifa >= 0 ? 'up' : 'down'} accent={ACCENTS[2]} />
-            <MetricCard titulo="Venta acumulada hoy" valor={formatCurrency(anchorTotal)} sub={`${pctInicio(D) >= 0 ? '▲ +' : '▼ '}${pctInicio(D).toFixed(1)}% vs inicio`} tono={D >= 0 ? 'up' : 'down'} accent={ACCENTS[3]} />
-          </div>
-          <ResponsiveContainer width="100%" height={280}>
-            <ComposedChart data={trayectoria} margin={{ top: 12, right: 12, left: 0, bottom: 4 }}>
-              <defs>
-                <linearGradient id="gradTray" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid stroke={ink.grid} vertical={false} />
-              <XAxis dataKey="etiqueta" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
-              <YAxis domain={domY} tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
-              <Tooltip content={
-                <TooltipChart
-                  format={(v, _n, p) => {
-                    const d = p && typeof p.delta === 'number' ? (p.delta as number) : 0;
-                    const pct = p && typeof p.pct === 'number' ? (p.pct as number) : null;
-                    if (d === 0) return formatCurrency(v);
-                    const flecha = d > 0 ? '▲ +' : '▼ ';
-                    const pctTxt = pct != null ? ` · ${flecha}${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%` : ` · ${d > 0 ? '+' : ''}`;
-                    return `${formatCurrency(v)} (${d > 0 ? '+' : ''}${formatCurrency(d)}${pctTxt})`;
-                  }}
-                />
-              } />
-              <Area type="monotone" dataKey="total" name="Venta acumulada" stroke="#8b5cf6" strokeWidth={2.5} fill="url(#gradTray)" dot={{ r: 3, fill: '#8b5cf6' }} activeDot={{ r: 5 }} />
-            </ComposedChart>
-          </ResponsiveContainer>
-          <p className="mt-1 text-[11px] text-zinc-400">
-            La línea es el valor acumulado por {unidad}: baja los períodos con más bajas y sube los que tienen más alzas, hasta el valor de hoy. Pasa el mouse por cada punto para ver el cambio ($ y %). El eje se enfoca en la zona de cambio para que el movimiento se note.
-          </p>
-        </div>
-
-        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+        <div className="grid gap-3 lg:grid-cols-2">
           {/* Variación neta por asesor */}
           <div className={CARD}>
             <div className="mb-2 flex items-start justify-between gap-2">
@@ -1448,5 +1516,17 @@ function badgeStatus(s: string | null): string {
   if (/final/.test(x)) return 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300';
   if (/rechaz|cancel/.test(x)) return 'bg-rose-500/15 text-rose-700 dark:text-rose-300';
   if (/aprob|iniciar/.test(x)) return 'bg-purple-500/15 text-purple-700 dark:text-purple-300';
+  return 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400';
+}
+
+// Color del badge de "Tipo" de edición en el historial.
+function tipoBadge(t?: string): string {
+  const x = (t ?? '').toLowerCase();
+  if (/eliminar|rechazo/.test(x)) return 'bg-rose-500/15 text-rose-700 dark:text-rose-300';
+  if (/alza/.test(x)) return 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300';
+  if (/baja/.test(x)) return 'bg-orange-500/15 text-orange-700 dark:text-orange-300';
+  if (/tarifa/.test(x)) return 'bg-amber-500/15 text-amber-700 dark:text-amber-300';
+  if (/periodo/.test(x)) return 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300';
+  if (/autoriz|estado|creaci|sap/.test(x)) return 'bg-purple-500/15 text-purple-700 dark:text-purple-300';
   return 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400';
 }

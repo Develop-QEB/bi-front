@@ -56,3 +56,7 @@ export async function getVentaTotal(f: Partial<FiltrosReporte>): Promise<number>
 export interface CatorcenaCal { catorcena: number; ini: string | null; fin: string | null; etiqueta: string }
 /** Calendario de catorcenas del año. */
 export const getCatorcenas = (anio = ANIO_DEF) => getJSON<CatorcenaCal[]>(`/reportes/catorcenas?anio=${anio}`);
+
+export interface Tarifas { efectiva: number; publica: number; descuentoPct: number; caras: number; monto: number }
+/** Promedios de tarifa efectiva y pública según filtros. */
+export const getTarifas = (f: Partial<FiltrosReporte>) => getJSON<Tarifas>(`/reportes/tarifas?${qsFiltros(f)}`);

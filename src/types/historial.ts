@@ -32,10 +32,12 @@ export interface EventoHistorial {
   invAntes: number | null;
   invDespues: number | null;
   descripcion: string;
+  tipoEdicion?: string;
   caraIds?: number[];
   // Atributos EXACTOS de las caras editadas (solo en /reportes/impacto, filtros del jefe).
   cliente?: string | null;
   asesor?: string | null;
+  marca?: string | null;
   plazas?: string[];
   formatos?: string[];
   muebles?: string[];
