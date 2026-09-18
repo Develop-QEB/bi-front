@@ -442,18 +442,44 @@ function FiltroGrupo({ opciones, valor, onSel }: { opciones: [string, string][];
 }
 
 // Dropdown etiquetado (para la barra de filtros del jefe).
+// Dropdown de selección ÚNICA, con el mismo estilo morado que los multi-select
+// (antes usaba <select> nativo → el navegador lo pintaba distinto a los demás).
 function SelectBox({ label, valor, opciones, onSel }: { label: string; valor: string; opciones: [string, string][]; onSel: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: PointerEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('pointerdown', h);
+    return () => document.removeEventListener('pointerdown', h);
+  }, [open]);
+  const actual = opciones.find(([v]) => v === valor)?.[1] ?? valor;
   return (
-    <label className="flex w-full items-center gap-1.5 text-xs sm:w-auto">
+    <div ref={ref} className="relative flex w-full items-center gap-1.5 text-xs sm:w-auto">
       <span className="w-24 shrink-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400 sm:w-auto">{label}</span>
-      <select
-        value={valor}
-        onChange={(e) => onSel(e.target.value)}
-        className="min-w-0 flex-1 rounded-lg border border-purple-200/60 bg-white/80 px-2 py-1.5 text-xs text-zinc-700 shadow-sm outline-none focus:border-purple-400 dark:border-purple-900/40 dark:bg-[#241633] dark:text-zinc-200 sm:max-w-[160px] sm:flex-none sm:py-1"
+      <button
+        type="button" onClick={() => setOpen((v) => !v)}
+        className="flex min-w-0 flex-1 items-center justify-between gap-1 rounded-lg border border-purple-200/60 bg-white/80 px-2 py-1.5 text-xs text-zinc-700 shadow-sm outline-none focus:border-purple-400 dark:border-purple-900/40 dark:bg-[#241633] dark:text-zinc-200 sm:max-w-[160px] sm:flex-none sm:py-1"
       >
-        {opciones.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-      </select>
-    </label>
+        <span className="truncate">{actual}</span>
+        <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-40 mt-1 max-h-64 w-44 overflow-auto rounded-lg border border-purple-200/60 bg-white p-1 shadow-2xl dark:border-purple-900/40 dark:bg-[#241633]">
+          {opciones.map(([v, l]) => (
+            <button
+              key={v} type="button" onClick={() => { onSel(v); setOpen(false); }}
+              className={cn(
+                'flex w-full items-center rounded px-2 py-1.5 text-left text-xs',
+                v === valor ? 'bg-purple-500/15 font-medium text-purple-700 dark:text-purple-200' : 'text-zinc-700 hover:bg-purple-500/10 dark:text-zinc-200'
+              )}
+            >
+              <span className="truncate">{l}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -609,16 +635,16 @@ export function VariacionesPage() {
   const [semsSel, setSemsSel] = useState<number[]>([]);   // semanas ISO
   const [catsSel, setCatsSel] = useState<number[]>([]);   // catorcenas
   const [catCal, setCatCal] = useState<CatorcenaCal[]>([]); // calendario de catorcenas del año
-  const [plaza, setPlaza] = useState('');
-  const [formato, setFormato] = useState('');
-  const [mueble, setMueble] = useState('');
-  const [asesor, setAsesor] = useState('');
+  const [plazasSel, setPlazasSel] = useState<string[]>([]);       // multi + búsqueda
+  const [formatosSel, setFormatosSel] = useState<string[]>([]);   // multi + búsqueda
+  const [mueblesSel, setMueblesSel] = useState<string[]>([]);     // multi + búsqueda
+  const [asesoresSel, setAsesoresSel] = useState<string[]>([]);   // multi + búsqueda
   const [clientesSel, setClientesSel] = useState<string[]>([]);   // multi + búsqueda
   const [campaniasSel, setCampaniasSel] = useState<string[]>([]); // multi + búsqueda
   const [marcasSel, setMarcasSel] = useState<string[]>([]);       // multi + búsqueda
   const [statusSel, setStatusSel] = useState<string[]>([]);       // estatus (ventas/pase a ventas)
   const [idCampania, setIdCampania] = useState('');               // filtro por ID (texto)
-  const [campoFiltro, setCampoFiltro] = useState<'todos' | 'caras' | 'monto'>('todos');
+  const [campoFiltro, setCampoFiltro] = useState<'todos' | 'caras' | 'monto' | 'periodo' | 'eliminacion'>('todos');
   const [direccion, setDireccion] = useState<'todas' | 'alzas' | 'bajas'>('todas');
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const ink = chartInk(isDark);
@@ -638,9 +664,11 @@ export function VariacionesPage() {
   // período inmediato anterior (solo cuando hay un único período seleccionado).
   useEffect(() => {
     setVentaTotal(null); setVentaPrev(null);
-    // V_APS filtra por cliente único; si hay varios, la venta total muestra todos.
-    const clienteUnico = clientesSel.length === 1 ? clientesSel[0] : null;
-    const base = { anio, plaza: plaza || null, formato: formato || null, mueble: mueble || null, cliente: clienteUnico, asesor: asesor || null };
+    // V_APS filtra por un valor único; si hay varios seleccionados, la venta total
+    // muestra todos (el detalle sí se filtra en la tabla). Mismo criterio que cliente.
+    const uniq1 = (a: string[]) => (a.length === 1 ? a[0] : null);
+    const clienteUnico = uniq1(clientesSel);
+    const base = { anio, plaza: uniq1(plazasSel), formato: uniq1(formatosSel), mueble: uniq1(mueblesSel), cliente: clienteUnico, asesor: uniq1(asesoresSel) };
     const per: Partial<FiltrosReporte> =
       granularidad === 'mes' ? { meses: mesesSel }
       : granularidad === 'catorcena' ? { catorcenas: catsSel }
@@ -662,7 +690,7 @@ export function VariacionesPage() {
     getVentasPeriodo(uni as Periodo, { ...base, ...per })
       .then((rows) => setVentasPeriodo(Object.fromEntries(rows.map((r) => [r.periodo, r.monto]))))
       .catch(() => setVentasPeriodo({}));
-  }, [anio, granularidad, mesesSel, catsSel, semsSel, plaza, formato, mueble, clientesSel, asesor, tick]);
+  }, [anio, granularidad, mesesSel, catsSel, semsSel, plazasSel, formatosSel, mueblesSel, clientesSel, asesoresSel, tick]);
 
   // Opciones de los dropdowns, derivadas del universo de ediciones del año.
   const opciones = useMemo(() => {
@@ -702,8 +730,8 @@ export function VariacionesPage() {
   const catorcenasDisp = [...new Set(imp.ediciones.map((e) => catDe(e.fecha)).filter((c) => c > 0))].sort((a, b) => a - b);
 
   const limpiar = () => {
-    setGranularidad('mes'); setMesesSel([]); setSemsSel([]); setCatsSel([]); setPlaza(''); setFormato(''); setMueble('');
-    setClientesSel([]); setCampaniasSel([]); setMarcasSel([]); setStatusSel([]); setIdCampania(''); setAsesor(''); setCampoFiltro('todos'); setDireccion('todas');
+    setGranularidad('mes'); setMesesSel([]); setSemsSel([]); setCatsSel([]); setPlazasSel([]); setFormatosSel([]); setMueblesSel([]);
+    setClientesSel([]); setCampaniasSel([]); setMarcasSel([]); setStatusSel([]); setIdCampania(''); setAsesoresSel([]); setCampoFiltro('todos'); setDireccion('todas');
   };
 
   // Filtros: período, plaza/formato/mueble/asesor, cliente/campaña/marca (multi),
@@ -712,15 +740,17 @@ export function VariacionesPage() {
   const fil = imp.ediciones.filter((e) => {
     if (campoFiltro === 'caras' && e.carasAntes == null) return false;
     if (campoFiltro === 'monto' && !(e.invAntes != null || (e.monto ?? 0) !== 0)) return false;
-    if (plaza && !(e.plazas ?? []).includes(plaza)) return false;
-    if (formato && !(e.formatos ?? []).includes(formato)) return false;
-    if (mueble && !(e.muebles ?? []).includes(mueble)) return false;
+    if (campoFiltro === 'periodo' && e.tipoEdicion !== 'Cambio de periodo') return false;
+    if (campoFiltro === 'eliminacion' && e.tipoEdicion !== 'Eliminar circuito') return false;
+    if (plazasSel.length && !(e.plazas ?? []).some((p) => plazasSel.includes(p))) return false;
+    if (formatosSel.length && !(e.formatos ?? []).some((f) => formatosSel.includes(f))) return false;
+    if (mueblesSel.length && !(e.muebles ?? []).some((m) => mueblesSel.includes(m))) return false;
     if (clientesSel.length && !(e.cliente && clientesSel.includes(e.cliente))) return false;
     if (campaniasSel.length && !(e.campania && campaniasSel.includes(e.campania))) return false;
     if (marcasSel.length && !(e.marca && marcasSel.includes(e.marca))) return false;
     if (statusSel.length && !(e.status && statusSel.includes(e.status))) return false;
     if (idq && !String(e.refId ?? '').includes(idq)) return false;
-    if (asesor && e.asesor !== asesor) return false;
+    if (asesoresSel.length && !(e.asesor && asesoresSel.includes(e.asesor))) return false;
     if (granularidad === 'mes' && mesesSel.length && !mesesSel.includes(new Date(e.fecha).getMonth() + 1)) return false;
     if (granularidad === 'semana' && semsSel.length && !semsSel.includes(isoWeek(new Date(e.fecha)))) return false;
     if (granularidad === 'catorcena' && catsSel.length && !catsSel.includes(catDe(e.fecha))) return false;
@@ -890,7 +920,7 @@ export function VariacionesPage() {
     : granularidad === 'catorcena' ? catsSel.map((c) => `Cat ${c}`)
     : granularidad === 'semana' ? semsSel.map((w) => `Sem ${w}`) : [];
   const chipsActivos = [
-    ...periodoLabels, plaza, formato, mueble, asesor,
+    ...periodoLabels, ...plazasSel, ...formatosSel, ...mueblesSel, ...asesoresSel,
     ...clientesSel, ...campaniasSel, ...marcasSel, ...statusSel, idq ? `ID ${idq}` : '',
     campoFiltro !== 'todos' ? campoFiltro : '', direccion !== 'todas' ? direccion : '',
   ].filter(Boolean) as string[];
@@ -921,10 +951,10 @@ export function VariacionesPage() {
           {granularidad === 'semana' && (
             <MultiSelect label="Semana" opciones={semanasDisp.map((w) => [w, `Sem ${w}`] as [number, string])} sel={semsSel} onChange={setSemsSel} />
           )}
-          <SelectBox label="Plaza" valor={plaza} opciones={conTodos(opciones.plazas)} onSel={setPlaza} />
-          <SelectBox label="Formato" valor={formato} opciones={conTodos(opciones.formatos)} onSel={setFormato} />
-          <SelectBox label="Tipo de mueble" valor={mueble} opciones={conTodos(opciones.muebles)} onSel={setMueble} />
-          <SelectBox label="Asesor" valor={asesor} opciones={conTodos(opciones.asesores)} onSel={setAsesor} />
+          <MultiSelectStr label="Plaza" opciones={opciones.plazas} sel={plazasSel} onChange={setPlazasSel} />
+          <MultiSelectStr label="Formato" opciones={opciones.formatos} sel={formatosSel} onChange={setFormatosSel} />
+          <MultiSelectStr label="Tipo de mueble" opciones={opciones.muebles} sel={mueblesSel} onChange={setMueblesSel} />
+          <MultiSelectStr label="Asesor" opciones={opciones.asesores} sel={asesoresSel} onChange={setAsesoresSel} />
           <MultiSelectStr label="Cliente" opciones={opciones.clientes} sel={clientesSel} onChange={setClientesSel} />
           <MultiSelectStr label="Campaña" opciones={opciones.campanias} sel={campaniasSel} onChange={setCampaniasSel} />
           <MultiSelectStr label="Marca" opciones={opciones.marcas} sel={marcasSel} onChange={setMarcasSel} />
@@ -940,8 +970,8 @@ export function VariacionesPage() {
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">Campo editado</span>
-            <FiltroGrupo opciones={[['todos', 'Todos'], ['caras', 'Caras'], ['monto', 'Tarifa']]} valor={campoFiltro} onSel={(v) => setCampoFiltro(v as typeof campoFiltro)} />
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">Movimiento</span>
+            <FiltroGrupo opciones={[['todos', 'Todos'], ['caras', 'Caras'], ['monto', 'Tarifa'], ['periodo', 'Cambio de periodo'], ['eliminacion', 'Eliminación']]} valor={campoFiltro} onSel={(v) => setCampoFiltro(v as typeof campoFiltro)} />
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-zinc-500 dark:text-zinc-400">Dirección</span>
