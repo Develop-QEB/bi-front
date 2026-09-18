@@ -89,6 +89,10 @@ export function ResumenVentasPage() {
             </div>
           ) : (
             <>
+              <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-400/50 bg-amber-400/10 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/40 dark:text-amber-200">
+                <span aria-hidden>🚧</span>
+                <span><b>Pestaña BI en desarrollo y validación.</b> La data presentada podría tener variaciones.</span>
+              </div>
               <div className="mb-3 flex items-center justify-between gap-3">
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">
                   Datos actualizados el {formatDate(datos.actualizadoEn)}
