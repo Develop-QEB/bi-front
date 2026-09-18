@@ -75,7 +75,7 @@ function App() {
         <div className="mx-auto max-w-[1600px] px-3 py-2.5 sm:px-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <img src="/imagotipo.png" alt="QEB" className="h-9 w-9 rounded-lg object-contain" />
+              <img src="/imagotipo.png" alt="QEB" className="h-9 w-9 rounded-lg bg-white object-contain p-1 shadow-sm ring-1 ring-purple-200/60" />
               <div>
                 <h1 className="text-base font-semibold leading-tight text-zinc-800 dark:text-white">Reportes de Ventas</h1>
                 <p className="hidden text-[11px] text-zinc-500 dark:text-zinc-400 sm:block">

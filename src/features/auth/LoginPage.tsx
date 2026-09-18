@@ -38,8 +38,8 @@ export function LoginPage() {
       <div className="relative z-10 w-full max-w-sm animate-[fadeInUp_0.5s_ease-out]">
         {/* Marca */}
         <div className="mb-6 flex flex-col items-center text-center">
-          <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500 to-fuchsia-500 shadow-lg shadow-purple-500/30">
-            <img src="/imagotipo.png" alt="QEB" className="h-10 w-10 object-contain" onError={(e) => { (e.currentTarget.style.display = 'none'); }} />
+          <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-white p-2 shadow-lg shadow-purple-500/25 ring-1 ring-purple-200/60">
+            <img src="/imagotipo.png" alt="QEB" className="h-full w-full object-contain" onError={(e) => { (e.currentTarget.style.display = 'none'); }} />
           </div>
           <h1 className="bg-gradient-to-r from-purple-600 to-fuchsia-500 bg-clip-text text-3xl font-bold tracking-tight text-transparent dark:from-purple-300 dark:to-fuchsia-300">
             QEBI
