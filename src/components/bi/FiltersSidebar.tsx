@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { ChevronDown, SlidersHorizontal } from 'lucide-react';
 import { Select } from '../ui/select';
-import { ThemeToggle } from '../ui/ThemeToggle';
 import { cn } from '../../lib/utils';
 import { MESES } from '../../lib/periodos';
 import type { BaseDatos, FiltrosResumen } from '../../types/bi';
@@ -38,13 +37,12 @@ export function FiltersSidebar({
 
   return (
     <aside className="flex w-full shrink-0 flex-col gap-4 rounded-2xl border border-purple-200/50 bg-white/90 p-4 shadow-xl shadow-purple-100/20 backdrop-blur-xl dark:border-purple-900/30 dark:bg-[#1a1025]/90 dark:shadow-purple-900/10 sm:gap-5 sm:p-5 lg:w-64">
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-start gap-2">
         <img
           src="/logo-grupo-imu.png"
           alt="Grupo IMU"
           className="h-10 w-auto object-contain dark:brightness-0 dark:invert sm:h-12"
         />
-        <ThemeToggle />
       </div>
 
       <h1 className="text-lg font-light leading-tight tracking-wide text-purple-700 dark:text-purple-200">
