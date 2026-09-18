@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { BarChart3, Filter, LogOut, Target, TrendingUp } from 'lucide-react';
+import { BarChart3, Construction, Filter, LogOut, Target, TrendingUp } from 'lucide-react';
 import { ResumenVentasPage } from './features/resumen-ventas/ResumenVentasPage';
 import { EmbudoPage, ObjetivosPage, VariacionesPage } from './features/reportes/ReportesPage';
 import { LoginPage } from './features/auth/LoginPage';
@@ -179,7 +179,7 @@ function App() {
         <div className="p-3 sm:p-4 lg:p-6">
           <div className="mx-auto max-w-[1600px] space-y-3">
             <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-400/50 bg-amber-400/10 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/40 dark:text-amber-200">
-              <span aria-hidden>🚧</span>
+              <Construction className="h-4 w-4 shrink-0" />
               <span><b>Módulo en desarrollo y validación.</b> La data presentada podría tener variaciones.</span>
             </div>
             {vista === 'variaciones' && <VariacionesPage />}

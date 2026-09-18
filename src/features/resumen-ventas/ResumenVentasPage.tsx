@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Construction, AlertTriangle, Search } from 'lucide-react';
 import { FiltersSidebar } from '../../components/bi/FiltersSidebar';
 import { KpiCard, StatTile } from '../../components/bi/KpiCard';
 import { VentasVsPptoChart } from '../../components/charts/VentasVsPptoChart';
@@ -90,7 +91,7 @@ export function ResumenVentasPage() {
           ) : (
             <>
               <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-400/50 bg-amber-400/10 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/40 dark:text-amber-200">
-                <span aria-hidden>🚧</span>
+                <Construction className="h-4 w-4 shrink-0" />
                 <span><b>Pestaña BI en desarrollo y validación.</b> La data presentada podría tener variaciones.</span>
               </div>
               <div className="mb-3 flex items-center justify-between gap-3">
@@ -118,7 +119,7 @@ export function ResumenVentasPage() {
                         : 'mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-amber-400/60 bg-amber-400/10 p-3 text-xs text-amber-800 dark:border-amber-500/40 dark:text-amber-200'
                     }
                   >
-                    <span aria-hidden>{personalizado ? '🔎' : '⚠️'}</span>
+                    {personalizado ? <Search className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
                     <span className="font-semibold">
                       {personalizado ? 'Información filtrada.' : 'La información NO está personalizada/filtrada.'}
                     </span>
