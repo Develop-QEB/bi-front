@@ -1,26 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
-import { BarChart3, Construction, Filter, LogOut, Target, TrendingUp } from 'lucide-react';
+import { BarChart3, Construction, Filter, KeyRound, LogOut, Target, TrendingUp, Users, X } from 'lucide-react';
 import { ResumenVentasPage } from './features/resumen-ventas/ResumenVentasPage';
 import { EmbudoPage, ObjetivosPage, VariacionesPage } from './features/reportes/ReportesPage';
+import { GestorUsuariosPage } from './features/usuarios/GestorUsuariosPage';
 import { LoginPage } from './features/auth/LoginPage';
 import { ThemeToggle } from './components/ui/ThemeToggle';
 import { Spinner } from './components/ui/spinner';
-import { useAuthStore } from './store/authStore';
+import { useAuthStore, type Permisos } from './store/authStore';
+import { cambiarMiPassword } from './services/usuarios.service';
 import { setOnUnauthorized } from './lib/api';
 import { cn } from './lib/utils';
 
-type Vista = 'bi' | 'variaciones' | 'embudo' | 'objetivos';
+type Vista = 'bi' | 'variaciones' | 'embudo' | 'objetivos' | 'usuarios';
 
 const TABS = [
-  { v: 'bi', label: 'BI', Icon: BarChart3 },
-  { v: 'variaciones', label: 'Variaciones e impacto', Icon: TrendingUp },
-  { v: 'embudo', label: 'Embudo', Icon: Filter },
-  { v: 'objetivos', label: 'Objetivos', Icon: Target },
+  { v: 'bi', label: 'BI', Icon: BarChart3, perm: 'bi' as keyof Permisos },
+  { v: 'variaciones', label: 'Variaciones e impacto', Icon: TrendingUp, perm: 'variaciones' as keyof Permisos },
+  { v: 'embudo', label: 'Embudo', Icon: Filter, perm: 'embudo' as keyof Permisos },
+  { v: 'objetivos', label: 'Objetivos', Icon: Target, perm: 'objetivos' as keyof Permisos },
+  { v: 'usuarios', label: 'Usuarios', Icon: Users, perm: null },
 ] as const;
 
 function App() {
   const [vista, setVista] = useState<Vista>('bi');
   const [menuAbierto, setMenuAbierto] = useState(false);
+  const [cambiarPass, setCambiarPass] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
   const activo = TABS.find((t) => t.v === vista) ?? TABS[0];
@@ -33,11 +37,25 @@ function App() {
   const hidratar = useAuthStore((s) => s.hidratar);
   const logout = useAuthStore((s) => s.logout);
 
+  const puedeVer = (t: (typeof TABS)[number]): boolean =>
+    !user ? false : t.perm === null ? user.esAdmin : user.esAdmin || user.permisos[t.perm];
+
   useEffect(() => {
     hidratar();
     setOnUnauthorized(() => useAuthStore.getState().logout());
     return () => setOnUnauthorized(null);
   }, [hidratar]);
+
+  // Si la pestaña actual no está permitida, salta a la primera visible.
+  useEffect(() => {
+    if (!user) return;
+    const t = TABS.find((x) => x.v === vista);
+    const ok = t && (t.perm === null ? user.esAdmin : user.esAdmin || user.permisos[t.perm]);
+    if (!ok) {
+      const primera = TABS.find((x) => (x.perm === null ? user.esAdmin : user.esAdmin || user.permisos[x.perm]));
+      if (primera) setVista(primera.v);
+    }
+  }, [user, vista]);
 
   // Cierra el menú móvil al tocar fuera de él.
   useEffect(() => {
@@ -92,6 +110,14 @@ function App() {
               </span>
               <ThemeToggle />
               <button
+                onClick={() => setCambiarPass(true)}
+                title="Cambiar mi contraseña"
+                aria-label="Cambiar mi contraseña"
+                className="flex items-center gap-1.5 rounded-full border border-purple-200/60 px-2.5 py-1.5 text-xs font-medium text-purple-700 transition-colors hover:bg-purple-500/10 dark:border-purple-900/40 dark:text-purple-200"
+              >
+                <KeyRound className="h-4 w-4" />
+              </button>
+              <button
                 onClick={logout}
                 title="Cerrar sesión"
                 aria-label="Cerrar sesión"
@@ -104,7 +130,7 @@ function App() {
 
           {/* Desktop: tabs en fila */}
           <nav className="mt-2.5 hidden flex-wrap items-center gap-2 sm:flex">
-            {TABS.map((t) => (
+            {TABS.filter(puedeVer).map((t) => (
               <button
                 key={t.v}
                 onClick={() => setVista(t.v)}
@@ -148,7 +174,7 @@ function App() {
             >
               <div className="min-h-0">
                 <div className="mt-2 flex flex-col gap-1 rounded-2xl border border-purple-200/50 bg-white/95 p-2 shadow-2xl backdrop-blur-xl dark:border-purple-900/30 dark:bg-[#1a1025]/95">
-                  {TABS.map((t, i) => (
+                  {TABS.filter(puedeVer).map((t, i) => (
                     <button
                       key={t.v}
                       onClick={() => { setVista(t.v); setMenuAbierto(false); }}
@@ -175,6 +201,12 @@ function App() {
 
       {vista === 'bi' ? (
         <ResumenVentasPage />
+      ) : vista === 'usuarios' ? (
+        <div className="p-3 sm:p-4 lg:p-6">
+          <div className="mx-auto max-w-[1600px]">
+            <GestorUsuariosPage />
+          </div>
+        </div>
       ) : (
         <div className="p-3 sm:p-4 lg:p-6">
           <div className="mx-auto max-w-[1600px] space-y-3">
@@ -188,6 +220,45 @@ function App() {
           </div>
         </div>
       )}
+
+      {cambiarPass && <CambiarPasswordModal onClose={() => setCambiarPass(false)} />}
+    </div>
+  );
+}
+
+function CambiarPasswordModal({ onClose }: { onClose: () => void }) {
+  const [actual, setActual] = useState('');
+  const [nueva, setNueva] = useState('');
+  const [err, setErr] = useState('');
+  const [ok, setOk] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const inputCls = 'w-full rounded-xl border border-purple-200/60 bg-white/70 px-3 py-2 text-sm outline-none focus:border-purple-400 dark:border-purple-900/40 dark:bg-[#241633]/70 dark:text-zinc-100';
+
+  const guardar = async (e: React.FormEvent) => {
+    e.preventDefault(); setErr(''); setGuardando(true);
+    try { await cambiarMiPassword(actual, nueva); setOk(true); setTimeout(onClose, 1200); }
+    catch (x) { setErr(x instanceof Error ? x.message : 'Error'); setGuardando(false); }
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-2xl border border-purple-200/50 bg-white/95 p-5 shadow-2xl backdrop-blur-xl dark:border-purple-900/40 dark:bg-[#1a1025]/95" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="font-semibold text-zinc-800 dark:text-white">Cambiar mi contraseña</h3>
+          <button onClick={onClose} className="rounded-lg p-1 text-zinc-400 hover:text-zinc-600"><X className="h-4 w-4" /></button>
+        </div>
+        {ok ? (
+          <p className="py-4 text-center text-sm text-emerald-600 dark:text-emerald-400">Contraseña actualizada correctamente.</p>
+        ) : (
+          <form onSubmit={guardar} className="space-y-3">
+            <input className={inputCls} type="password" placeholder="Contraseña actual" value={actual} onChange={(e) => setActual(e.target.value)} required autoFocus autoComplete="current-password" />
+            <input className={inputCls} type="password" placeholder="Nueva contraseña (mín. 6)" value={nueva} onChange={(e) => setNueva(e.target.value)} required minLength={6} autoComplete="new-password" />
+            {err && <p className="text-xs text-rose-500">{err}</p>}
+            <button disabled={guardando} className="w-full rounded-xl bg-gradient-to-br from-purple-500 to-fuchsia-500 py-2 text-sm font-semibold text-white disabled:opacity-60">
+              {guardando ? 'Guardando…' : 'Actualizar'}
+            </button>
+          </form>
+        )}
+      </div>
     </div>
   );
 }

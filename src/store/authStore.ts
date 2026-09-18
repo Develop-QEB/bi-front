@@ -1,23 +1,34 @@
 import { create } from 'zustand';
 import { API_URL, getToken, setToken, clearToken } from '../lib/api';
 
+export interface Permisos { bi: boolean; variaciones: boolean; embudo: boolean; objetivos: boolean }
 export interface Usuario {
-  id: number;
+  userId: number;
   nombre: string;
   email: string;
-  rol: string;
-  area?: string | null;
-  puesto?: string | null;
-  foto_perfil?: string | null;
+  esAdmin: boolean;
+  permisos: Permisos;
 }
+
+const PERMISOS_VACIOS: Permisos = { bi: false, variaciones: false, embudo: false, objetivos: false };
 
 interface AuthState {
   token: string | null;
   user: Usuario | null;
-  cargando: boolean; // verificando sesión al arrancar
+  cargando: boolean;
   login: (correo: string, password: string) => Promise<void>;
   logout: () => void;
   hidratar: () => Promise<void>;
+}
+
+function normalizar(u: Partial<Usuario> | undefined): Usuario {
+  return {
+    userId: u?.userId ?? 0,
+    nombre: u?.nombre ?? '',
+    email: u?.email ?? '',
+    esAdmin: !!u?.esAdmin,
+    permisos: { ...PERMISOS_VACIOS, ...(u?.permisos ?? {}) },
+  };
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -31,12 +42,10 @@ export const useAuthStore = create<AuthState>((set) => ({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ correo, password }),
     });
-    if (!res.ok) {
-      throw new Error(res.status === 401 ? 'Correo o contraseña incorrectos' : 'No se pudo iniciar sesión');
-    }
-    const data = (await res.json()) as { token: string; user: Usuario };
+    if (!res.ok) throw new Error(res.status === 401 ? 'Correo o contraseña incorrectos' : 'No se pudo iniciar sesión');
+    const data = (await res.json()) as { token: string; user: Partial<Usuario> };
     setToken(data.token);
-    set({ token: data.token, user: data.user, cargando: false });
+    set({ token: data.token, user: normalizar(data.user), cargando: false });
   },
 
   logout() {
@@ -44,20 +53,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ token: null, user: null, cargando: false });
   },
 
-  // Al arrancar: si hay token, valida contra /auth/me; si no, queda deslogueado.
   async hidratar() {
     const token = getToken();
     if (!token) { set({ token: null, user: null, cargando: false }); return; }
     try {
       const res = await fetch(`${API_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error('sesión inválida');
-      const data = (await res.json()) as { user: { nombre?: string; email?: string; rol?: string } };
-      const u = data.user ?? {};
-      set({
-        token,
-        user: { id: 0, nombre: u.nombre ?? '', email: u.email ?? '', rol: u.rol ?? 'Normal' },
-        cargando: false,
-      });
+      const data = (await res.json()) as { user: Partial<Usuario> };
+      set({ token, user: normalizar(data.user), cargando: false });
     } catch {
       clearToken();
       set({ token: null, user: null, cargando: false });
