@@ -1531,6 +1531,7 @@ function tipoBadge(t?: string): string {
   if (/baja/.test(x)) return 'bg-orange-500/15 text-orange-700 dark:text-orange-300';
   if (/tarifa/.test(x)) return 'bg-amber-500/15 text-amber-700 dark:text-amber-300';
   if (/periodo/.test(x)) return 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300';
+  if (/aps/.test(x)) return 'bg-slate-500/15 text-slate-600 dark:text-slate-300';
   if (/autoriz|estado|creaci|sap/.test(x)) return 'bg-purple-500/15 text-purple-700 dark:text-purple-300';
   return 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400';
 }
