@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { BarChart3, Filter, Target, TrendingUp } from 'lucide-react';
+import { BarChart3, Filter, LogOut, Target, TrendingUp } from 'lucide-react';
 import { ResumenVentasPage } from './features/resumen-ventas/ResumenVentasPage';
 import { EmbudoPage, ObjetivosPage, VariacionesPage } from './features/reportes/ReportesPage';
+import { LoginPage } from './features/auth/LoginPage';
 import { ThemeToggle } from './components/ui/ThemeToggle';
+import { Spinner } from './components/ui/spinner';
+import { useAuthStore } from './store/authStore';
+import { setOnUnauthorized } from './lib/api';
 import { cn } from './lib/utils';
 
 type Vista = 'bi' | 'variaciones' | 'embudo' | 'objetivos';
@@ -21,6 +25,19 @@ function App() {
   const navRef = useRef<HTMLDivElement>(null);
   const activo = TABS.find((t) => t.v === vista) ?? TABS[0];
   const ActivoIcon = activo.Icon;
+
+  // Sesión.
+  const user = useAuthStore((s) => s.user);
+  const token = useAuthStore((s) => s.token);
+  const cargandoSesion = useAuthStore((s) => s.cargando);
+  const hidratar = useAuthStore((s) => s.hidratar);
+  const logout = useAuthStore((s) => s.logout);
+
+  useEffect(() => {
+    hidratar();
+    setOnUnauthorized(() => useAuthStore.getState().logout());
+    return () => setOnUnauthorized(null);
+  }, [hidratar]);
 
   // Cierra el menú móvil al tocar fuera de él.
   useEffect(() => {
@@ -44,6 +61,14 @@ function App() {
     return () => ro.disconnect();
   }, []);
 
+  // Gate de sesión (después de los hooks, para no romper el orden de hooks).
+  if (cargandoSesion) {
+    return <div className="bg-main-pattern flex min-h-svh items-center justify-center"><Spinner size="lg" /></div>;
+  }
+  if (!token || !user) {
+    return <LoginPage />;
+  }
+
   return (
     <div className="bg-main-pattern min-h-svh overflow-x-clip">
       <header ref={headerRef} className="sticky top-0 z-30 border-b border-purple-200/40 bg-white/70 backdrop-blur-xl dark:border-purple-900/30 dark:bg-[#140c1f]/70">
@@ -59,10 +84,21 @@ function App() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <span className="hidden items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 sm:inline-flex">
+              <span className="hidden items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 lg:inline-flex">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Datos en vivo · QEB
               </span>
+              <span className="hidden max-w-[160px] truncate text-xs font-medium text-zinc-600 dark:text-zinc-300 sm:inline" title={user.email}>
+                {user.nombre || user.email}
+              </span>
               <ThemeToggle />
+              <button
+                onClick={logout}
+                title="Cerrar sesión"
+                aria-label="Cerrar sesión"
+                className="flex items-center gap-1.5 rounded-full border border-purple-200/60 px-2.5 py-1.5 text-xs font-medium text-purple-700 transition-colors hover:bg-purple-500/10 dark:border-purple-900/40 dark:text-purple-200"
+              >
+                <LogOut className="h-4 w-4" /><span className="hidden sm:inline">Salir</span>
+              </button>
             </div>
           </div>
 

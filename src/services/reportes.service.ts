@@ -1,8 +1,8 @@
-import { API_URL } from '../lib/api';
+import { authFetch } from '../lib/api';
 import type { CampaniaDetalle, Ciclo, ConteoMonto, ConteoPeriodo, Dimension, Embudo, FiltrosReporte, OpcionesReporte, Periodo } from '../types/reportes';
 
 async function getJSON<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`);
+  const res = await authFetch(path);
   if (!res.ok) throw new Error(`El back respondió ${res.status} en ${path}`);
   return (await res.json()) as T;
 }

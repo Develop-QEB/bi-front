@@ -1,4 +1,4 @@
-import { API_URL } from '../lib/api';
+import { authFetch } from '../lib/api';
 
 export interface ObjetivosData {
   anio: number;
@@ -7,7 +7,7 @@ export interface ObjetivosData {
 }
 
 async function req<T>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, opts);
+  const res = await authFetch(path, opts);
   if (!res.ok) throw new Error(`El back respondió ${res.status} en ${path}`);
   return (await res.json()) as T;
 }

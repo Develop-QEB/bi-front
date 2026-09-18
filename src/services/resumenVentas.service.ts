@@ -1,16 +1,10 @@
+import { authFetch } from '../lib/api';
 import type { FiltrosResumen, ResumenVentas } from '../types/bi';
 
 /**
  * Capa de datos del Resumen General de Ventas.
- *
  * Llama al backend (bi-back), que agrega desde la vista `V_APS_Globales` de QEB.
- * URL base: `VITE_API_URL` si está; si no, en dev usa el back local y en el build
- * de producción (bi.qeb.mx) usa el back desplegado en Render.
- * El filtrado real (millones de renglones) es responsabilidad del back.
  */
-const API =
-  import.meta.env.VITE_API_URL ??
-  (import.meta.env.DEV ? 'http://localhost:3001' : 'https://bi-back-96j5.onrender.com');
 
 function toQuery(filtros: FiltrosResumen): string {
   const p = new URLSearchParams();
@@ -23,7 +17,7 @@ function toQuery(filtros: FiltrosResumen): string {
 }
 
 async function getJSON<T>(path: string): Promise<T> {
-  const res = await fetch(`${API}${path}`);
+  const res = await authFetch(path);
   if (!res.ok) throw new Error(`El back respondió ${res.status} en ${path}`);
   return (await res.json()) as T;
 }
