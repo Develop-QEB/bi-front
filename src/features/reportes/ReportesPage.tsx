@@ -8,6 +8,7 @@ import {
 import { Spinner } from '../../components/ui/spinner';
 import { LiveBadge } from '../../components/ui/LiveBadge';
 import { useLiveRefresh } from '../../hooks/useLiveRefresh';
+import { useCloseOnRotate } from '../../hooks/useCloseOnRotate';
 import { MetricCard, ACCENTS } from '../../components/bi/MetricCard';
 import { TooltipChart } from '../../components/charts/TooltipChart';
 import { cn } from '../../lib/utils';
@@ -453,6 +454,7 @@ function SelectBox({ label, valor, opciones, onSel }: { label: string; valor: st
     document.addEventListener('pointerdown', h);
     return () => document.removeEventListener('pointerdown', h);
   }, [open]);
+  useCloseOnRotate(open, () => setOpen(false));
   const actual = opciones.find(([v]) => v === valor)?.[1] ?? valor;
   return (
     <div ref={ref} className="relative flex w-full items-center gap-1.5 text-xs sm:w-auto">
@@ -507,6 +509,7 @@ function MultiSelect({ label, opciones, sel, onChange }: { label: string; opcion
     document.addEventListener('pointerdown', h);
     return () => document.removeEventListener('pointerdown', h);
   }, [open]);
+  useCloseOnRotate(open, () => setOpen(false));
   const toggle = (v: number) => onChange(sel.includes(v) ? sel.filter((x) => x !== v) : [...sel, v].sort((a, b) => a - b));
   const resumen = sel.length === 0 ? 'Todos' : sel.length === 1 ? (opciones.find((o) => o[0] === sel[0])?.[1] ?? '1') : `${sel.length} seleccionados`;
   return (
@@ -545,6 +548,7 @@ function MultiSelectStr({ label, opciones, sel, onChange }: { label: string; opc
     document.addEventListener('pointerdown', h);
     return () => document.removeEventListener('pointerdown', h);
   }, [open]);
+  useCloseOnRotate(open, () => setOpen(false));
   const toggle = (v: string) => onChange(sel.includes(v) ? sel.filter((x) => x !== v) : [...sel, v]);
   const resumen = sel.length === 0 ? 'Todos' : sel.length === 1 ? sel[0] : `${sel.length} seleccionados`;
   const filtradas = q ? opciones.filter((o) => o.toLowerCase().includes(q.toLowerCase())) : opciones;
@@ -581,6 +585,7 @@ function MultiSelectStr({ label, opciones, sel, onChange }: { label: string; opc
 // tamaños; colapsable en móvil (muestra un resumen de filtros activos).
 function BarraFiltros({ children, resumen }: { children: ReactNode; resumen?: ReactNode }) {
   const [abierto, setAbierto] = useState(false);
+  useCloseOnRotate(abierto, () => setAbierto(false));
   return (
     <div className={cn(CARD, '!p-3', 'sticky z-20 top-[calc(var(--bi-header-h,104px)_+_8px)]')}>
       <button

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown, SlidersHorizontal } from 'lucide-react';
 import { Select } from '../ui/select';
+import { useCloseOnRotate } from '../../hooks/useCloseOnRotate';
 import { cn } from '../../lib/utils';
 import { MESES } from '../../lib/periodos';
 import type { BaseDatos, FiltrosResumen } from '../../types/bi';
@@ -33,6 +34,7 @@ export function FiltersSidebar({
   const set = <K extends keyof FiltrosResumen>(key: K, valor: FiltrosResumen[K]) =>
     onChange({ ...filtros, [key]: valor });
   const [abierto, setAbierto] = useState(false);
+  useCloseOnRotate(abierto, () => setAbierto(false));
   const nFiltros = [filtros.base, filtros.asesor, filtros.cliente].filter(Boolean).length + (mesesSel.length ? 1 : 0);
 
   return (
