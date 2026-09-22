@@ -6,6 +6,7 @@ import { GestorUsuariosPage } from './features/usuarios/GestorUsuariosPage';
 import { LoginPage } from './features/auth/LoginPage';
 import { ThemeToggle } from './components/ui/ThemeToggle';
 import { Spinner } from './components/ui/spinner';
+import { TopLoadingBar } from './components/ui/TopLoadingBar';
 import { useAuthStore, type Permisos } from './store/authStore';
 import { setOnUnauthorized } from './lib/api';
 import { cn } from './lib/utils';
@@ -88,6 +89,7 @@ function App() {
 
   return (
     <div className="bg-main-pattern min-h-svh overflow-x-clip">
+      <TopLoadingBar />
       <header ref={headerRef} className="sticky top-0 z-30 border-b border-purple-200/40 bg-white/70 backdrop-blur-xl dark:border-purple-900/30 dark:bg-[#140c1f]/70">
         <div className="mx-auto max-w-[1600px] px-3 py-2.5 sm:px-4">
           <div className="flex items-center justify-between gap-3">
