@@ -995,34 +995,48 @@ export function VariacionesPage() {
           <p className="-mt-1 text-[11px] text-zinc-400">Audit log con campaña, tipo, quién editó y el impacto en inversión · {filas.length} registros</p>
         </div>
         <div className="max-h-[460px] overflow-auto">
-          <table className="w-full min-w-[760px] text-sm">
+          <table className="w-full min-w-[1040px] text-sm">
             <thead className="sticky top-0 bg-white/90 dark:bg-[#1a1025]/90">
               <tr className="text-left text-xs text-zinc-400">
                 <th className="py-1 pr-2">Fecha</th>
                 <th className="py-1 pr-2">Tipo</th>
                 <th className="py-1 pr-2">Campaña</th>
+                <th className="py-1 pr-2">Artículo</th>
+                <th className="py-1 pr-2">Plaza</th>
+                <th className="py-1 pr-2">Formato</th>
                 <th className="py-1 pr-2">Usuario</th>
                 <th className="py-1 pr-2">Campo</th>
-                <th className="py-1 pr-2">Caras (antes → después)</th>
+                <th className="py-1 pr-2">Cantidad (antes → después)</th>
                 <th className="py-1 pr-2">Inversión (antes → después)</th>
                 <th className="py-1 text-right">Δ Inversión</th>
               </tr>
             </thead>
             <tbody>
               {filas.map((e) => {
-                const campos: string[] = [];
-                if (e.carasAntes != null) campos.push('Caras');
-                if (e.invAntes != null) campos.push('Tarifa');
+                const esPeriodo = e.tipoEdicion === 'Cambio de periodo';
+                const unidadCant = e.unidad === 'impresiones' ? 'Impresiones' : 'Caras';
+                const campos: { label: string; tono: string }[] = [];
+                if (e.carasAntes != null) campos.push({ label: unidadCant, tono: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300' });
+                if (e.invAntes != null) campos.push({ label: 'Tarifa', tono: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' });
+                if (esPeriodo) campos.push({ label: 'Periodo', tono: 'bg-sky-500/15 text-sky-700 dark:text-sky-300' });
+                const art = (e.articulos ?? []).join(', ');
+                const plaza = (e.plazas ?? []).join(', ');
+                const fmt = e.formatoDetalle || (e.muebles ?? []).join(', ') || (e.formatos ?? []).join(', ');
                 return (
                   <tr key={e.id} className="border-t border-purple-100/40 dark:border-purple-900/20">
                     <td className="py-1.5 pr-2 text-xs text-zinc-500">{new Date(e.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}</td>
                     <td className="py-1.5 pr-2"><span className={cn('whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-medium', tipoBadge(e.tipoEdicion))}>{e.tipoEdicion ?? '—'}</span></td>
-                    <td className="max-w-[150px] truncate py-1.5 pr-2 font-medium text-zinc-700 dark:text-zinc-200">{e.campania ?? '—'}</td>
+                    <td className="max-w-[150px] truncate py-1.5 pr-2 font-medium text-zinc-700 dark:text-zinc-200">
+                      {e.campania ?? '—'}{e.refId ? <span className="ml-1 text-[10px] font-normal text-zinc-400">#{e.refId}</span> : null}
+                    </td>
+                    <td className="max-w-[130px] truncate py-1.5 pr-2 text-xs text-zinc-500 dark:text-zinc-400" title={art}>{art || '—'}</td>
+                    <td className="max-w-[120px] truncate py-1.5 pr-2 text-xs text-zinc-500 dark:text-zinc-400" title={plaza}>{plaza || '—'}</td>
+                    <td className="max-w-[120px] truncate py-1.5 pr-2 text-xs text-zinc-500 dark:text-zinc-400" title={fmt}>{fmt || '—'}</td>
                     <td className="max-w-[130px] truncate py-1.5 pr-2 text-zinc-500 dark:text-zinc-400">{e.usuario ?? '—'}</td>
                     <td className="py-1.5 pr-2">
                       <span className="flex gap-1">
                         {campos.length ? campos.map((c) => (
-                          <span key={c} className={cn('rounded px-1.5 py-0.5 text-[10px] font-medium', c === 'Caras' ? 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300' : 'bg-amber-500/15 text-amber-700 dark:text-amber-300')}>{c}</span>
+                          <span key={c.label} className={cn('whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-medium', c.tono)}>{c.label}</span>
                         )) : <span className="text-xs text-zinc-400">—</span>}
                       </span>
                     </td>
@@ -1039,13 +1053,19 @@ export function VariacionesPage() {
                         <span className="text-zinc-600 dark:text-zinc-300">{fmtM(e.invAntes)} <span className="text-zinc-400">→</span> {fmtM(e.invDespues ?? 0)}</span>
                       ) : <span className="text-zinc-400">—</span>}
                     </td>
-                    <td className={cn('py-1.5 text-right tabular-nums font-medium', (e.monto ?? 0) > 0 ? 'text-emerald-600 dark:text-emerald-400' : (e.monto ?? 0) < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-400')}>
-                      {e.monto ? `${e.monto > 0 ? '+' : ''}${formatCurrency(e.monto)}` : '—'}
-                    </td>
+                    {esPeriodo ? (
+                      <td className="py-1.5 text-right">
+                        <span className="whitespace-nowrap rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 dark:text-sky-300">Trasladado</span>
+                      </td>
+                    ) : (
+                      <td className={cn('py-1.5 text-right tabular-nums font-medium', (e.monto ?? 0) > 0 ? 'text-emerald-600 dark:text-emerald-400' : (e.monto ?? 0) < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-400')}>
+                        {e.monto ? `${e.monto > 0 ? '+' : ''}${formatCurrency(e.monto)}` : '—'}
+                      </td>
+                    )}
                   </tr>
                 );
               })}
-              {!filas.length && <tr><td colSpan={8} className="py-6 text-center text-xs text-zinc-400">Sin ediciones en el período</td></tr>}
+              {!filas.length && <tr><td colSpan={11} className="py-6 text-center text-xs text-zinc-400">Sin ediciones en el período</td></tr>}
             </tbody>
           </table>
         </div>

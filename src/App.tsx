@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { BarChart3, Construction, Filter, LogOut, Target, TrendingUp, Users } from 'lucide-react';
+import { BarChart3, Construction, Filter, Info, LogOut, Target, TrendingUp, Users } from 'lucide-react';
 import { ResumenVentasPage } from './features/resumen-ventas/ResumenVentasPage';
 import { EmbudoPage, ObjetivosPage, VariacionesPage } from './features/reportes/ReportesPage';
 import { GestorUsuariosPage } from './features/usuarios/GestorUsuariosPage';
@@ -13,14 +13,14 @@ import { cn } from './lib/utils';
 type Vista = 'bi' | 'variaciones' | 'embudo' | 'objetivos' | 'usuarios';
 
 const TABS = [
-  { v: 'bi', label: 'BI', Icon: BarChart3, perm: 'bi' as keyof Permisos },
-  { v: 'variaciones', label: 'Variaciones e impacto', Icon: TrendingUp, perm: 'variaciones' as keyof Permisos },
-  { v: 'embudo', label: 'Embudo', Icon: Filter, perm: 'embudo' as keyof Permisos },
-  { v: 'objetivos', label: 'Objetivos', Icon: Target, perm: 'objetivos' as keyof Permisos },
+  { v: 'variaciones', label: 'Variaciones e impacto', Icon: TrendingUp, perm: 'variaciones' as keyof Permisos, beta: false },
+  { v: 'embudo', label: 'Embudo', Icon: Filter, perm: 'embudo' as keyof Permisos, beta: false },
+  { v: 'objetivos', label: 'Objetivos', Icon: Target, perm: 'objetivos' as keyof Permisos, beta: false },
+  { v: 'bi', label: 'BI', Icon: BarChart3, perm: 'bi' as keyof Permisos, beta: true },
 ] as const;
 
 function App() {
-  const [vista, setVista] = useState<Vista>('bi');
+  const [vista, setVista] = useState<Vista>('variaciones');
   const [menuAbierto, setMenuAbierto] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
@@ -150,6 +150,7 @@ function App() {
               >
                 <t.Icon className="h-4 w-4 shrink-0" />
                 {t.label}
+                {t.beta && <span className={cn('rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide', vista === t.v ? 'bg-white/25 text-white' : 'bg-amber-500/20 text-amber-700 dark:text-amber-300')}>Beta</span>}
               </button>
             ))}
           </nav>
@@ -196,6 +197,7 @@ function App() {
                     >
                       <t.Icon className="h-4 w-4 shrink-0" />
                       {t.label}
+                      {t.beta && <span className={cn('rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide', vista === t.v ? 'bg-white/25 text-white' : 'bg-amber-500/20 text-amber-700 dark:text-amber-300')}>Beta</span>}
                       {vista === t.v && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-white/90" />}
                     </button>
                   ))}
@@ -207,7 +209,15 @@ function App() {
       </header>
 
       {vista === 'bi' ? (
-        <ResumenVentasPage />
+        <>
+          <div className="px-3 pt-3 sm:px-4 lg:px-6">
+            <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-2 rounded-xl border border-sky-400/50 bg-sky-400/10 px-3 py-2 text-xs text-sky-800 dark:border-sky-500/40 dark:text-sky-200">
+              <Info className="h-4 w-4 shrink-0" />
+              <span><b>Beta · Datos solo de QEB.</b> Esta vista NO incluye información de SAP. La integración de SAP para venta histórica está en exploración.</span>
+            </div>
+          </div>
+          <ResumenVentasPage />
+        </>
       ) : vista === 'usuarios' ? (
         <div className="p-3 sm:p-4 lg:p-6">
           <div className="mx-auto max-w-[1600px]">

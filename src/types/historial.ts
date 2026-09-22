@@ -34,6 +34,13 @@ export interface EventoHistorial {
   descripcion: string;
   tipoEdicion?: string;
   caraIds?: number[];
+  /** Códigos de circuito tocados (RT-…, IM-…). */
+  articulos?: string[];
+  /** Unidad de la cantidad: 'impresiones' si son artículos IM-, si no 'caras'. */
+  unidad?: 'caras' | 'impresiones';
+  /** Formato/mueble del circuito (del detalle), útil en eliminación. */
+  formatoDetalle?: string | null;
+  periodoDetalle?: string | null;
   // Atributos EXACTOS de las caras editadas (solo en /reportes/impacto, filtros del jefe).
   cliente?: string | null;
   asesor?: string | null;
