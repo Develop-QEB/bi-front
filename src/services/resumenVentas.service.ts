@@ -8,7 +8,11 @@ import type { FiltrosResumen, ResumenVentas } from '../types/bi';
 
 function toQuery(filtros: FiltrosResumen): string {
   const p = new URLSearchParams();
-  if (filtros.base) p.set('base', filtros.base);
+  if (filtros.bases?.length) p.set('bases', filtros.bases.join(','));
+  else if (filtros.base) p.set('base', filtros.base);
+  if (filtros.tipos?.length) p.set('tipos', filtros.tipos.join(','));
+  if (filtros.muebles?.length) p.set('muebles', filtros.muebles.join(','));
+  if (filtros.digital?.length) p.set('digital', filtros.digital.join(','));
   if (filtros.asesor) p.set('asesor', filtros.asesor);
   if (filtros.cliente) p.set('cliente', filtros.cliente);
   p.set('anio', String(filtros.anio));

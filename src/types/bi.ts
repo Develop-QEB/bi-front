@@ -6,12 +6,20 @@
  * origen, no los componentes.
  */
 
-/** Las tres fuentes de datos del filtro BASE. */
-export type BaseDatos = 'CIMU' | 'Trade' | 'SAP';
+/** Las fuentes de datos del filtro BASE. */
+export type BaseDatos = 'CIMU' | 'Trade' | 'UDC';
 
 export interface FiltrosResumen {
-  /** `null` = "Todas" */
+  /** `null` = "Todas" (compat; hoy se usa `bases`) */
   base: BaseDatos | null;
+  /** Bases seleccionadas (multi). Vacío = todas. */
+  bases?: string[];
+  /** Tipo de artículo (`Tipo`): RT/BF/IN/IM/CT. Vacío = todos. */
+  tipos?: string[];
+  /** Palabras clave de mueble/formato (Dscription): PARABUS/COLUMNA/MACRO. Vacío = todos. */
+  muebles?: string[];
+  /** `Tipo Digital`: Tradicional/Digital/Bonificacion. Vacío = todos. */
+  digital?: string[];
   /** Asesor comercial (columna `U_Asesor`); `null` = "Todos" */
   asesor: string | null;
   /** Cliente (columna `U_Cliente`); `null` = "Todos" */

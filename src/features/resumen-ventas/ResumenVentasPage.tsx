@@ -14,13 +14,21 @@ import { formatDate } from '../../lib/utils';
 import { alternarMes, kpisDeSeleccion } from '../../lib/seleccion';
 import type { FiltrosResumen, ResumenVentas } from '../../types/bi';
 
+// Por default: CIMU + Trade, solo Parabús + Columna, Tradicional + Digital.
+// (El usuario puede mover cualquiera desde el sidebar.)
 const FILTROS_INICIALES: FiltrosResumen = {
   base: null,
+  bases: ['CIMU', 'Trade'],
+  tipos: [],
+  muebles: ['PARABUS', 'COLUMNA'],
+  digital: ['Tradicional', 'Digital'],
   asesor: null,
   cliente: null,
   anio: 2026,
   mes: null,
 };
+const MUEBLE_LBL: Record<string, string> = { PARABUS: 'Parabús', COLUMNA: 'Columna', MACRO: 'Gran Formato' };
+const TIPO_LBL: Record<string, string> = { RT: 'Renta', BF: 'Bonificación', IN: 'Intercambio', IM: 'Impresión', CT: 'Cortesía' };
 
 const MESES_AB = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
@@ -104,13 +112,16 @@ export function ResumenVentasPage() {
 
               {(() => {
                 const partes = [
-                  filtros.base ?? 'Todas las bases',
+                  filtros.bases?.length ? filtros.bases.join(' + ') : 'Todas las bases',
+                  filtros.tipos?.length ? filtros.tipos.map((t) => TIPO_LBL[t] ?? t).join(', ') : 'Todos los tipos',
+                  filtros.muebles?.length ? filtros.muebles.map((m) => MUEBLE_LBL[m] ?? m).join(', ') : 'Todos los formatos',
+                  filtros.digital?.length ? filtros.digital.join(' + ') : 'Trad. + Digital',
                   filtros.asesor ?? 'Todos los asesores',
                   filtros.cliente ?? 'Todos los clientes',
                   `Año ${filtros.anio}`,
                   mesesSel.length ? mesesSel.slice().sort((a, b) => a - b).map((m) => MESES_AB[m - 1]).join(', ') : 'Todos los meses',
                 ];
-                const personalizado = Boolean(filtros.base || filtros.asesor || filtros.cliente || mesesSel.length);
+                const personalizado = Boolean(filtros.asesor || filtros.cliente || mesesSel.length || filtros.tipos?.length || filtros.bases?.length || filtros.muebles?.length || filtros.digital?.length);
                 return (
                   <div
                     className={

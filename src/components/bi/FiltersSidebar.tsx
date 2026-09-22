@@ -6,8 +6,12 @@ import { cn } from '../../lib/utils';
 import { MESES } from '../../lib/periodos';
 import type { BaseDatos, FiltrosResumen } from '../../types/bi';
 
-const BASES: BaseDatos[] = ['CIMU', 'Trade', 'SAP'];
+const BASES_OPC: BaseDatos[] = ['CIMU', 'Trade', 'UDC'];
+const TIPOS_OPC: [string, string][] = [['RT', 'Renta'], ['BF', 'Bonificación'], ['IN', 'Intercambio'], ['IM', 'Impresión']];
+const MUEBLES_OPC: [string, string][] = [['PARABUS', 'Parabús'], ['COLUMNA', 'Columna'], ['MACRO', 'Gran Formato']];
+const DIGITAL_OPC: [string, string][] = [['Tradicional', 'Tradicional'], ['Digital', 'Digital']];
 const ANIOS = [2027, 2026, 2025];
+type MultiKey = 'bases' | 'tipos' | 'muebles' | 'digital';
 
 interface FiltersSidebarProps {
   filtros: FiltrosResumen;
@@ -33,9 +37,16 @@ export function FiltersSidebar({
 }: FiltersSidebarProps) {
   const set = <K extends keyof FiltrosResumen>(key: K, valor: FiltrosResumen[K]) =>
     onChange({ ...filtros, [key]: valor });
+  const toggleArr = (key: MultiKey, val: string) => {
+    const cur = filtros[key] ?? [];
+    const next = cur.includes(val) ? cur.filter((x) => x !== val) : [...cur, val];
+    onChange({ ...filtros, [key]: next });
+  };
   const [abierto, setAbierto] = useState(false);
   useCloseOnRotate(abierto, () => setAbierto(false));
-  const nFiltros = [filtros.base, filtros.asesor, filtros.cliente].filter(Boolean).length + (mesesSel.length ? 1 : 0);
+  const nFiltros =
+    (filtros.bases?.length ? 1 : 0) + (filtros.tipos?.length ? 1 : 0) + (filtros.muebles?.length ? 1 : 0) +
+    (filtros.digital?.length ? 1 : 0) + [filtros.asesor, filtros.cliente].filter(Boolean).length + (mesesSel.length ? 1 : 0);
 
   return (
     <aside className="flex w-full shrink-0 flex-col gap-4 rounded-2xl border border-purple-200/50 bg-white/90 p-4 shadow-xl shadow-purple-100/20 backdrop-blur-xl dark:border-purple-900/30 dark:bg-[#1a1025]/90 dark:shadow-purple-900/10 sm:gap-5 sm:p-5 lg:w-64">
@@ -64,14 +75,36 @@ export function FiltersSidebar({
       <hr className="border-purple-200/60 dark:border-purple-900/40" />
 
       <Filtro etiqueta="BASE">
-        <Select
-          value={filtros.base ?? ''}
-          onChange={(e) => set('base', (e.target.value || null) as BaseDatos | null)}
-          options={[
-            { value: '', label: 'Todas' },
-            ...BASES.map((b) => ({ value: b, label: b })),
-          ]}
-        />
+        <div className="grid grid-cols-3 gap-2">
+          {BASES_OPC.map((b) => (
+            <BotonFiltro key={b} activo={(filtros.bases ?? []).includes(b)} onClick={() => toggleArr('bases', b)}>{b}</BotonFiltro>
+          ))}
+        </div>
+        <p className="mt-1.5 text-[11px] leading-snug text-zinc-400 dark:text-zinc-500">{(filtros.bases ?? []).length ? '' : 'Vacío = todas las bases.'}</p>
+      </Filtro>
+
+      <Filtro etiqueta="Tipo de artículo">
+        <div className="grid grid-cols-2 gap-2">
+          {TIPOS_OPC.map(([v, l]) => (
+            <BotonFiltro key={v} activo={(filtros.tipos ?? []).includes(v)} onClick={() => toggleArr('tipos', v)}>{l}</BotonFiltro>
+          ))}
+        </div>
+      </Filtro>
+
+      <Filtro etiqueta="Formato">
+        <div className="grid grid-cols-3 gap-2">
+          {MUEBLES_OPC.map(([v, l]) => (
+            <BotonFiltro key={v} activo={(filtros.muebles ?? []).includes(v)} onClick={() => toggleArr('muebles', v)}>{l}</BotonFiltro>
+          ))}
+        </div>
+      </Filtro>
+
+      <Filtro etiqueta="Tradicional / Digital">
+        <div className="grid grid-cols-2 gap-2">
+          {DIGITAL_OPC.map(([v, l]) => (
+            <BotonFiltro key={v} activo={(filtros.digital ?? []).includes(v)} onClick={() => toggleArr('digital', v)}>{l}</BotonFiltro>
+          ))}
+        </div>
       </Filtro>
 
       <Filtro etiqueta="Asesor">
