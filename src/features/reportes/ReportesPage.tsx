@@ -908,14 +908,19 @@ export function VariacionesPage() {
     if (!Number.isFinite(b) || b <= 0) continue;
     deltaAnioBucket.set(b, (deltaAnioBucket.get(b) ?? 0) + (e.monto ?? 0));
   }
-  const bucketsAnio = [...deltaAnioBucket.keys()].sort((a, b) => a - b);
+  const bucketsConDatos = [...deltaAnioBucket.keys()].filter((b) => b > 0).sort((a, b) => a - b);
+  const maxBucket = bucketsConDatos.length ? Math.max(...bucketsConDatos) : 0;
+  // Acumulado CONTINUO desde el bucket 1 hasta el último con datos (rellena huecos:
+  // los períodos sin ediciones conservan el acumulado previo → salen planos).
   const cumBucket = new Map<number, number>();
   let accAnio = valorInicio;
-  for (const b of bucketsAnio) { accAnio += deltaAnioBucket.get(b) ?? 0; cumBucket.set(b, accAnio); }
-  // Buckets a mostrar: si hay filtro de período, solo esos (pero su valor es el acumulado
-  // corrido desde el inicio del año); si no, todo el año.
+  for (let b = 1; b <= maxBucket; b++) { accAnio += deltaAnioBucket.get(b) ?? 0; cumBucket.set(b, accAnio); }
+  // Buckets a mostrar: con filtro de período, solo esos; si no, TODO el rango continuo
+  // 1..máximo (para que se vean todos los meses, aunque no tengan ediciones).
   const bucketsFil = new Set(fil.map((e) => bucketDe(e)).filter((b) => Number.isFinite(b) && b > 0));
-  const bucketsVista = periodoActivo ? bucketsAnio.filter((b) => bucketsFil.has(b)) : bucketsAnio;
+  const bucketsVista = periodoActivo
+    ? bucketsConDatos.filter((b) => bucketsFil.has(b))
+    : (maxBucket ? Array.from({ length: maxBucket }, (_, i) => i + 1) : bucketsConDatos);
   const trayectoria: { etiqueta: string; total: number; delta: number; pct: number | null }[] = [
     { etiqueta: 'Inicio', total: valorInicio, delta: 0, pct: null },
   ];
