@@ -655,6 +655,7 @@ export function VariacionesPage() {
   const ink = chartInk(isDark);
 
   const [ventaTotal, setVentaTotal] = useState<number | null>(null);
+  const [ventaAnio, setVentaAnio] = useState<number | null>(null); // venta V_APS del AÑO completo (ancla absoluta, ignora filtro de periodo)
   const [ventaPrev, setVentaPrev] = useState<number | null>(null); // período inmediato anterior (para ▲/▼)
   const [ventasPeriodo, setVentasPeriodo] = useState<Record<number, number>>({}); // venta V_APS por período (línea del chart)
   const [tick, setTick] = useState(0); // se incrementa con cada evento del WS → re-carga en vivo
@@ -680,6 +681,9 @@ export function VariacionesPage() {
       : granularidad === 'semana' ? { semanas: semsSel }
       : {};
     getVentaTotal({ ...base, ...per }).then(setVentaTotal).catch(() => setVentaTotal(null));
+    // Ancla ABSOLUTA: venta del AÑO completo (mismos filtros salvo el periodo) — para
+    // que "valor al inicio" no cambie al filtrar un mes (responde siempre al mismo acumulado).
+    getVentaTotal(base).then(setVentaAnio).catch(() => setVentaAnio(null));
 
     // Período previo: único valor seleccionado y > 1.
     const uno = granularidad === 'mes' && mesesSel.length === 1 ? { key: 'meses' as const, v: mesesSel[0] }
@@ -742,7 +746,9 @@ export function VariacionesPage() {
   // Filtros: período, plaza/formato/mueble/asesor, cliente/campaña/marca (multi),
   // ID de campaña, campo editado y dirección.
   const idq = idCampania.trim();
-  const fil = imp.ediciones.filter((e) => {
+  // Filtro BASE = todos los filtros MENOS el de periodo. `filAnio` = año completo
+  // (el ancla absoluta de "venta acumulada"); `fil` = + filtro de periodo (vista normal).
+  const pasaBase = (e: Impacto['ediciones'][number]) => {
     if (campoFiltro === 'caras' && !e.cambioCaras) return false;
     if (campoFiltro === 'monto' && !e.cambioTarifa) return false; // "Tarifa" = cambió la tarifa PÚBLICA (no cualquier inversión)
     if (campoFiltro === 'periodo' && e.tipoEdicion !== 'Cambio de periodo') return false;
@@ -756,14 +762,20 @@ export function VariacionesPage() {
     if (statusSel.length && !(e.status && statusSel.includes(e.status))) return false;
     if (idq && !String(e.refId ?? '').includes(idq)) return false;
     if (asesoresSel.length && !(e.asesor && asesoresSel.includes(e.asesor))) return false;
-    if (granularidad === 'mes' && mesesSel.length && !mesesSel.includes(new Date(e.fecha).getMonth() + 1)) return false;
-    if (granularidad === 'semana' && semsSel.length && !semsSel.includes(isoWeek(new Date(e.fecha)))) return false;
-    if (granularidad === 'catorcena' && catsSel.length && !catsSel.includes(catDe(e.fecha))) return false;
     const s = signo(e);
     if (direccion === 'alzas' && s <= 0) return false;
     if (direccion === 'bajas' && s >= 0) return false;
     return true;
-  });
+  };
+  const enPeriodo = (e: Impacto['ediciones'][number]) => {
+    if (granularidad === 'mes' && mesesSel.length && !mesesSel.includes(new Date(e.fecha).getMonth() + 1)) return false;
+    if (granularidad === 'semana' && semsSel.length && !semsSel.includes(isoWeek(new Date(e.fecha)))) return false;
+    if (granularidad === 'catorcena' && catsSel.length && !catsSel.includes(catDe(e.fecha))) return false;
+    return true;
+  };
+  const periodoActivo = (granularidad === 'mes' && mesesSel.length > 0) || (granularidad === 'semana' && semsSel.length > 0) || (granularidad === 'catorcena' && catsSel.length > 0);
+  const filAnio = imp.ediciones.filter(pasaBase);
+  const fil = filAnio.filter(enPeriodo);
 
   const alzas = fil.filter((e) => (e.monto ?? 0) > 0);
   const bajas = fil.filter((e) => (e.monto ?? 0) < 0);
@@ -862,35 +874,44 @@ export function VariacionesPage() {
   const invBase = [...primerAntesPorCamp.values()].reduce((a, x) => a + x.inv, 0);
   const invActual = invBase + aporteCaras + aporteTarifa;
 
-  // Rango de fechas de las ediciones consideradas (para "fecha base").
-  const fechasFil = fil.map((e) => new Date(e.fecha).getTime()).filter((t) => Number.isFinite(t));
-  const fechaBaseIni = fechasFil.length ? new Date(Math.min(...fechasFil)).toISOString() : null;
-  // Reconstrucción del VALOR del período según la granularidad del filtro
-  // (mes/catorcena/semana). No guardamos el total por período, pero sí las
-  // variaciones (alzas/bajas): partimos del total actual (venta acumulada real)
-  // y aplicamos los deltas para saber cuánto valía en cada período y cómo se movió.
-  const anchorTotal = ventaTotal != null ? ventaTotal : invActual;
-  const D = total; // variación neta de las ediciones (alzas + bajas)
-  const valorInicio = anchorTotal - D;
+  // --- Reconstrucción del acumulado con BASELINE ABSOLUTO (año completo) ---
+  // El "valor al inicio" = venta del AÑO − variación de TODO el año (no del subconjunto
+  // filtrado), así NO cambia al filtrar un mes: responde siempre al mismo acumulado.
+  // Los puntos por período son acumulativos desde el día 1 del año.
+  const dAnio = filAnio.reduce((a, e) => a + (e.monto ?? 0), 0);
+  const anchorAnio = ventaAnio != null ? ventaAnio : (ventaTotal ?? invActual);
+  const valorInicio = anchorAnio - dAnio;
   const pctInicio = (v: number) => (valorInicio ? (v / valorInicio) * 100 : 0);
 
-  const deltaPorBucket = new Map<number, number>();
-  for (const e of fil) {
+  const deltaAnioBucket = new Map<number, number>();
+  for (const e of filAnio) {
     const b = bucketDe(e);
     if (!Number.isFinite(b) || b <= 0) continue;
-    deltaPorBucket.set(b, (deltaPorBucket.get(b) ?? 0) + (e.monto ?? 0));
+    deltaAnioBucket.set(b, (deltaAnioBucket.get(b) ?? 0) + (e.monto ?? 0));
   }
-  const bucketsOrden = [...deltaPorBucket.keys()].sort((a, b) => a - b);
-  let accVal = valorInicio;
+  const bucketsAnio = [...deltaAnioBucket.keys()].sort((a, b) => a - b);
+  const cumBucket = new Map<number, number>();
+  let accAnio = valorInicio;
+  for (const b of bucketsAnio) { accAnio += deltaAnioBucket.get(b) ?? 0; cumBucket.set(b, accAnio); }
+  // Buckets a mostrar: si hay filtro de período, solo esos (pero su valor es el acumulado
+  // corrido desde el inicio del año); si no, todo el año.
+  const bucketsFil = new Set(fil.map((e) => bucketDe(e)).filter((b) => Number.isFinite(b) && b > 0));
+  const bucketsVista = periodoActivo ? bucketsAnio.filter((b) => bucketsFil.has(b)) : bucketsAnio;
   const trayectoria: { etiqueta: string; total: number; delta: number; pct: number | null }[] = [
     { etiqueta: 'Inicio', total: valorInicio, delta: 0, pct: null },
   ];
-  for (const b of bucketsOrden) {
-    const d = deltaPorBucket.get(b)!;
-    const prev = accVal;
-    accVal += d;
-    trayectoria.push({ etiqueta: etiquetaBucket(b), total: accVal, delta: d, pct: prev ? (d / prev) * 100 : null });
+  for (const b of bucketsVista) {
+    const d = deltaAnioBucket.get(b) ?? 0;
+    const totalB = cumBucket.get(b) ?? valorInicio;
+    const prev = totalB - d;
+    trayectoria.push({ etiqueta: etiquetaBucket(b), total: totalB, delta: d, pct: prev ? (d / prev) * 100 : null });
   }
+  // "Venta acumulada" del último punto mostrado (fin del período filtrado, o total del año).
+  const anchorTotal = trayectoria.length > 1 ? trayectoria[trayectoria.length - 1].total : (ventaAnio ?? valorInicio);
+  const D = anchorTotal - valorInicio; // cuánto se movió del inicio del año al último punto mostrado
+  // Fecha base = primera edición del AÑO (estable; no cambia con el filtro de período).
+  const fechasAnio = filAnio.map((e) => new Date(e.fecha).getTime()).filter((t) => Number.isFinite(t));
+  const fechaBaseIni = fechasAnio.length ? new Date(Math.min(...fechasAnio)).toISOString() : null;
   const tvals = trayectoria.map((t) => t.total);
   const tmin = tvals.length ? Math.min(...tvals) : 0;
   const tmax = tvals.length ? Math.max(...tvals) : 1;
@@ -1120,14 +1141,14 @@ export function VariacionesPage() {
       <div className={CARD}>
         <CardTitle>Cómo se movió la venta acumulada por {unidad}</CardTitle>
         <p className="-mt-1 mb-3 text-[11px] text-zinc-400">
-          Cuánto valía en cada {unidad}. No guardamos el total por período, pero las ediciones (alzas/bajas) lo mueven:
-          partimos del valor de hoy y aplicamos las variaciones para reconstruir la trayectoria.
+          Valor acumulado del <b>año</b> reconstruido: parte del acumulado al inicio (día 1) y aplica las variaciones
+          (alzas/bajas) período a período. El <b>valor al inicio es siempre el del año completo</b> — no cambia al filtrar un período.
         </p>
         <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <MetricCard titulo="Valor al inicio" valor={formatCurrency(valorInicio)} sub={fechaBaseIni ? `${fmtFecha(fechaBaseIni)}` : 'Inicio del período'} tono="neutral" accent={ACCENTS[0]} />
+          <MetricCard titulo="Valor al inicio (año)" valor={formatCurrency(valorInicio)} sub={fechaBaseIni ? `desde ${fmtFecha(fechaBaseIni)}` : `Inicio ${anio}`} tono="neutral" accent={ACCENTS[0]} />
           <MetricCard titulo="Δ por caras" valor={`${aporteCaras >= 0 ? '+' : ''}${formatCurrency(aporteCaras)}`} sub={`${pctInicio(aporteCaras).toFixed(1)}% del valor inicial`} tono={aporteCaras >= 0 ? 'up' : 'down'} accent={ACCENTS[1]} />
           <MetricCard titulo="Δ por tarifa" valor={`${aporteTarifa >= 0 ? '+' : ''}${formatCurrency(aporteTarifa)}`} sub={`${pctInicio(aporteTarifa).toFixed(1)}% del valor inicial`} tono={aporteTarifa >= 0 ? 'up' : 'down'} accent={ACCENTS[2]} />
-          <MetricCard titulo="Venta acumulada hoy" valor={formatCurrency(anchorTotal)} sub={`${pctInicio(D) >= 0 ? '▲ +' : '▼ '}${pctInicio(D).toFixed(1)}% vs inicio`} tono={D >= 0 ? 'up' : 'down'} accent={ACCENTS[3]} />
+          <MetricCard titulo={periodoActivo ? 'Venta acum. (fin período)' : 'Venta acumulada hoy'} valor={formatCurrency(anchorTotal)} sub={`${pctInicio(D) >= 0 ? '▲ +' : '▼ '}${pctInicio(D).toFixed(1)}% vs inicio`} tono={D >= 0 ? 'up' : 'down'} accent={ACCENTS[3]} />
         </div>
         <ResponsiveContainer width="100%" height={280}>
           <ComposedChart data={trayectoria} margin={{ top: 12, right: 12, left: 0, bottom: 4 }}>
