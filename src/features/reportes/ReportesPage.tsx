@@ -653,7 +653,7 @@ export function VariacionesPage() {
   const [direccion, setDireccion] = useState<'todas' | 'alzas' | 'bajas'>('todas');
   const [verAnalisis, setVerAnalisis] = useState(false);        // desplegable "Ver más análisis"
   const [periodoSel, setPeriodoSel] = useState<number | null>(null); // bucket con click (drill-down)
-  const [basesSel, setBasesSel] = useState<string[]>(['CIMU', 'Trade']); // default CIMU+Trade
+  const [basesSel, setBasesSel] = useState<string[]>(['CIMU', 'TRADE']); // default CIMU+Trade (valores reales de sap_database, en mayúsculas)
   const [tiposArt, setTiposArt] = useState<string[]>(['RT', 'BF', 'IN']); // sin IM = sin impresiones por default
   const [apsFiltro, setApsFiltro] = useState<'todos' | 'con' | 'sin'>('todos'); // posteado (con/sin APS)
   const isDark = useThemeStore((s) => s.theme) === 'dark';
@@ -751,7 +751,7 @@ export function VariacionesPage() {
   const limpiar = () => {
     setGranularidad('mes'); setMesesSel([]); setSemsSel([]); setCatsSel([]); setPlazasSel([]); setFormatosSel([]); setMueblesSel([]);
     setClientesSel([]); setCampaniasSel([]); setMarcasSel([]); setStatusSel([]); setIdCampania(''); setAsesoresSel([]); setCampoFiltro('todos'); setDireccion('todas');
-    setBasesSel(['CIMU', 'Trade']); setTiposArt(['RT', 'BF', 'IN']); setApsFiltro('todos');
+    setBasesSel(['CIMU', 'TRADE']); setTiposArt(['RT', 'BF', 'IN']); setApsFiltro('todos');
   };
 
   // Filtros: período, plaza/formato/mueble/asesor, cliente/campaña/marca (multi),
@@ -928,9 +928,9 @@ export function VariacionesPage() {
   // "Venta acumulada" del último punto mostrado (fin del período filtrado, o total del año).
   const anchorTotal = trayectoria.length > 1 ? trayectoria[trayectoria.length - 1].total : (ventaAnio ?? valorInicio);
   const D = anchorTotal - valorInicio; // cuánto se movió del inicio del año al último punto mostrado
-  // Fecha base = primera edición del AÑO (estable; no cambia con el filtro de período).
-  const fechasAnio = filAnio.map((e) => new Date(e.fecha).getTime()).filter((t) => Number.isFinite(t));
-  const fechaBaseIni = fechasAnio.length ? new Date(Math.min(...fechasAnio)).toISOString() : null;
+  // Fecha base = DÍA 1 DEL AÑO (el "valor al inicio" es el acumulado al inicio del año,
+  // antes de cualquier edición; no es la fecha de la primera edición).
+  const fechaBaseIni = `${anio}-01-01T00:00:00`;
   const tvals = trayectoria.map((t) => t.total);
   const tmin = tvals.length ? Math.min(...tvals) : 0;
   const tmax = tvals.length ? Math.max(...tvals) : 1;
@@ -1110,7 +1110,11 @@ export function VariacionesPage() {
                     <td className="py-1.5 pr-2 text-xs text-zinc-500">{new Date(e.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}</td>
                     <td className="py-1.5 pr-2"><span className={cn('whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-medium', tipoBadge(e.tipoEdicion))}>{e.tipoEdicion ?? '—'}</span></td>
                     <td className="max-w-[150px] truncate py-1.5 pr-2 font-medium text-zinc-700 dark:text-zinc-200">{e.campania ?? '—'}</td>
-                    <td className="py-1.5 pr-2 text-xs tabular-nums text-zinc-500 dark:text-zinc-400">{e.refId ?? '—'}</td>
+                    <td className="py-1.5 pr-2 text-xs tabular-nums">
+                      {e.refId ? (
+                        <a href={`https://app.qeb.mx/campanas/detail/${e.refId}`} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline dark:text-purple-300" title="Abrir campaña en app.qeb.mx">{e.refId}</a>
+                      ) : <span className="text-zinc-400">—</span>}
+                    </td>
                     <td className="max-w-[130px] truncate py-1.5 pr-2 text-xs text-zinc-500 dark:text-zinc-400" title={art}>{art || '—'}</td>
                     <td className="max-w-[120px] truncate py-1.5 pr-2 text-xs text-zinc-500 dark:text-zinc-400" title={plaza}>{plaza || '—'}</td>
                     <td className="max-w-[120px] truncate py-1.5 pr-2 text-xs text-zinc-500 dark:text-zinc-400" title={fmt}>{fmt || '—'}</td>
@@ -1122,15 +1126,27 @@ export function VariacionesPage() {
                         )) : <span className="text-xs text-zinc-400">—</span>}
                       </span>
                     </td>
-                    {/* Cantidad: polimórfica según el movimiento (caras / tarifa pública / $ eliminado / periodo). */}
+                    {/* Cantidad: caras y/o tarifa pública (ambas si cambiaron juntas) / $ eliminado / periodo. */}
                     <td className="py-1.5 pr-2 text-xs tabular-nums">
                       {esElim ? (
                         <span className="text-zinc-600 dark:text-zinc-300">
                           {e.monto != null && e.monto !== 0 ? formatCurrency(Math.abs(e.monto)) : `${Math.abs(e.caras)}`}
                           <span className="mx-1 text-zinc-400">→</span>{e.monto != null && e.monto !== 0 ? '$0' : '0'}
                         </span>
-                      ) : e.cambioTarifa && !e.cambioCaras && e.tarifaAntes != null ? (
-                        <span className="text-zinc-600 dark:text-zinc-300">{formatCurrency(e.tarifaAntes)} <span className="text-zinc-400">→</span> {formatCurrency(e.tarifaDespues ?? 0)}</span>
+                      ) : (e.cambioCaras || e.cambioTarifa) ? (
+                        <div className="flex flex-col gap-0.5">
+                          {e.cambioCaras && e.carasAntes != null && (
+                            <span className="text-zinc-600 dark:text-zinc-300">
+                              <span className="mr-1 text-[10px] uppercase text-zinc-400">Caras</span>{e.carasAntes} <span className="text-zinc-400">→</span> {e.carasDespues}
+                              <span className={cn('ml-1', e.caras > 0 ? 'text-emerald-600 dark:text-emerald-400' : e.caras < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-400')}>({e.caras > 0 ? '+' : ''}{e.caras})</span>
+                            </span>
+                          )}
+                          {e.cambioTarifa && e.tarifaAntes != null && (
+                            <span className="text-zinc-600 dark:text-zinc-300">
+                              <span className="mr-1 text-[10px] uppercase text-zinc-400">Tarifa</span>{formatCurrency(e.tarifaAntes)} <span className="text-zinc-400">→</span> {formatCurrency(e.tarifaDespues ?? 0)}
+                            </span>
+                          )}
+                        </div>
                       ) : e.carasAntes != null ? (
                         <span className="text-zinc-600 dark:text-zinc-300">
                           {e.carasAntes} <span className="text-zinc-400">→</span> {e.carasDespues}
