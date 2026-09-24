@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ChevronDown, SlidersHorizontal } from 'lucide-react';
+import { BarChart3, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import {
   Area, Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Legend, Line, Pie, PieChart,
   ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -651,6 +651,8 @@ export function VariacionesPage() {
   const [idCampania, setIdCampania] = useState('');               // filtro por ID (texto)
   const [campoFiltro, setCampoFiltro] = useState<'todos' | 'caras' | 'monto' | 'periodo' | 'eliminacion'>('todos');
   const [direccion, setDireccion] = useState<'todas' | 'alzas' | 'bajas'>('todas');
+  const [verAnalisis, setVerAnalisis] = useState(false);        // desplegable "Ver más análisis"
+  const [periodoSel, setPeriodoSel] = useState<number | null>(null); // bucket con click (drill-down)
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const ink = chartInk(isDark);
 
@@ -826,7 +828,7 @@ export function VariacionesPage() {
     .sort((a, b) => a - b);
   const barrasMes = clavesPeriodo.map((b) => {
     const v = porPeriodo.get(b) ?? { alzas: 0, bajas: 0 };
-    return { mes: etiquetaBucket(b), alzas: v.alzas, bajas: v.bajas, neta: v.alzas + v.bajas, ventaTotal: ventasPeriodo[b] ?? 0 };
+    return { mes: etiquetaBucket(b), bucket: b, alzas: v.alzas, bajas: v.bajas, neta: v.alzas + v.bajas, ventaTotal: ventasPeriodo[b] ?? 0 };
   });
   const filas = fil;
 
@@ -940,6 +942,32 @@ export function VariacionesPage() {
     .map(([nombre, monto]) => ({ nombre, monto }))
     .filter((x) => x.monto !== 0)
     .sort((a, b) => b.monto - a.monto);
+
+  // Rango de fechas de las ediciones mostradas (para encabezados "variación realizada del … al …").
+  const fFilVista = fil.map((e) => new Date(e.fecha).getTime()).filter((t) => Number.isFinite(t));
+  const rangoIni = fFilVista.length ? new Date(Math.min(...fFilVista)).toISOString() : null;
+  const rangoFin = fFilVista.length ? new Date(Math.max(...fFilVista)).toISOString() : null;
+  const rangoTexto = rangoIni
+    ? `Variación realizada del ${fmtFecha(rangoIni)}${rangoFin && rangoFin.slice(0, 10) !== rangoIni.slice(0, 10) ? ` al ${fmtFecha(rangoFin)}` : ''}`
+    : 'Variación del período seleccionado';
+
+  // Drill-down: al hacer click en un período (barra), desglose de su variación por campaña.
+  const periodoSelValido = periodoSel != null && clavesPeriodo.includes(periodoSel) ? periodoSel : null;
+  const drillCamps = (() => {
+    if (periodoSelValido == null) return [] as { nombre: string; alzas: number; bajas: number; edic: number; neto: number }[];
+    const m = new Map<string, { alzas: number; bajas: number; edic: number }>();
+    for (const e of fil) {
+      if (bucketDe(e) !== periodoSelValido) continue;
+      const k = e.campania ?? (e.refId ? `#${e.refId}` : '—');
+      const x = m.get(k) ?? { alzas: 0, bajas: 0, edic: 0 };
+      const v = e.monto ?? 0;
+      if (v > 0) x.alzas += v; else if (v < 0) x.bajas += v;
+      x.edic++;
+      m.set(k, x);
+    }
+    return [...m.entries()].map(([nombre, v]) => ({ nombre, ...v, neto: v.alzas + v.bajas }))
+      .sort((a, b) => Math.abs(b.neto) - Math.abs(a.neto));
+  })();
 
   // Resumen compacto de filtros activos (para la barra colapsada en móvil).
   const periodoLabels = granularidad === 'mes' ? mesesSel.map((m) => MESES[m - 1])
@@ -1116,9 +1144,11 @@ export function VariacionesPage() {
 
       <div className={CARD}>
         <CardTitle>Variación de inversión por {unidad}</CardTitle>
-        <p className="-mt-1 mb-2 text-[11px] text-zinc-400">Alzas y bajas de ediciones; la línea ámbar es el efecto neto</p>
+        <p className="-mt-1 mb-2 text-[11px] text-zinc-400">Alzas y bajas de ediciones; la línea ámbar es el efecto neto · <span className="text-purple-500 dark:text-purple-300">clic en un {unidad} para ver su desglose</span></p>
         <ResponsiveContainer width="100%" height={300}>
-          <ComposedChart data={barrasMes} stackOffset="sign" margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
+          <ComposedChart data={barrasMes} stackOffset="sign" margin={{ top: 8, right: 8, left: 0, bottom: 4 }}
+            onClick={(s: unknown) => { const b = (s as { activePayload?: { payload?: { bucket?: number } }[] })?.activePayload?.[0]?.payload?.bucket; if (b != null) setPeriodoSel((p) => (p === b ? null : b)); }}
+            className="cursor-pointer">
             <CartesianGrid stroke={ink.grid} vertical={false} />
             <XAxis dataKey="mes" tick={{ fill: ink.axis, fontSize: 11 }} tickLine={false} axisLine={false} />
             <YAxis tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
@@ -1136,6 +1166,44 @@ export function VariacionesPage() {
           Verde arriba = subió inversión · rojo abajo = bajó · línea ámbar (Neta) = efecto neto del período (alzas + bajas)
         </p>
       </div>
+
+      {/* Desglose del período con click (drill-down): cómo se reparte su variación por campaña. */}
+      {periodoSelValido != null && (
+        <div className={cn(CARD, 'border-purple-300/60 ring-1 ring-purple-300/40')}>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div>
+              <CardTitle>Desglose de {etiquetaBucket(periodoSelValido)}</CardTitle>
+              <p className="-mt-1 text-[11px] text-zinc-400">Cómo se reparte la variación de ese {unidad} · {drillCamps.length} campaña(s)</p>
+            </div>
+            <button onClick={() => setPeriodoSel(null)} className="shrink-0 rounded-lg border border-purple-200/60 px-2.5 py-1 text-[11px] font-medium text-purple-700 hover:bg-purple-500/10 dark:border-purple-900/40 dark:text-purple-200">Cerrar</button>
+          </div>
+          <div className="max-h-64 overflow-auto">
+            <table className="w-full min-w-[520px] text-sm">
+              <thead className="sticky top-0 bg-white/90 dark:bg-[#1a1025]/90">
+                <tr className="text-left text-[11px] uppercase tracking-wide text-zinc-400">
+                  <th className="py-1 pr-2 font-medium">Campaña</th>
+                  <th className="py-1 pr-2 text-center font-medium">Edic.</th>
+                  <th className="py-1 pr-2 text-right font-medium">Alzas</th>
+                  <th className="py-1 pr-2 text-right font-medium">Bajas</th>
+                  <th className="py-1 text-right font-medium">Neta</th>
+                </tr>
+              </thead>
+              <tbody>
+                {drillCamps.map((c) => (
+                  <tr key={c.nombre} className="border-t border-purple-100/40 dark:border-purple-900/20">
+                    <td className="max-w-[240px] truncate py-1.5 pr-2 font-medium text-zinc-700 dark:text-zinc-200">{c.nombre}</td>
+                    <td className="py-1.5 pr-2 text-center tabular-nums text-zinc-500 dark:text-zinc-400">{c.edic}</td>
+                    <td className="py-1.5 pr-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{c.alzas ? `+${formatCurrency(c.alzas)}` : '—'}</td>
+                    <td className="py-1.5 pr-2 text-right tabular-nums text-rose-600 dark:text-rose-400">{c.bajas ? formatCurrency(c.bajas) : '—'}</td>
+                    <td className={cn('py-1.5 text-right tabular-nums font-semibold', c.neto > 0 ? 'text-emerald-600 dark:text-emerald-400' : c.neto < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-400')}>{c.neto ? `${c.neto > 0 ? '+' : ''}${formatCurrency(c.neto)}` : '—'}</td>
+                  </tr>
+                ))}
+                {!drillCamps.length && <tr><td colSpan={5} className="py-4 text-center text-xs text-zinc-400">Sin ediciones en {etiquetaBucket(periodoSelValido)}</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Cómo se movió la venta acumulada (debajo de "Variación de inversión") */}
       <div className={CARD}>
@@ -1181,6 +1249,20 @@ export function VariacionesPage() {
         </p>
       </div>
 
+      {/* Ver más análisis — desplegable con el detalle (clientes, tipo, asesor, plaza). */}
+      <button
+        onClick={() => setVerAnalisis((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 rounded-xl border border-purple-300/50 bg-purple-500/5 px-4 py-2.5 text-sm font-semibold text-purple-700 transition-colors hover:bg-purple-500/10 dark:border-purple-800/40 dark:text-purple-200"
+      >
+        <span className="flex flex-wrap items-center gap-2">
+          <BarChart3 className="h-4 w-4 shrink-0" /> {verAnalisis ? 'Ver menos análisis' : 'Ver más análisis'}
+          <span className="text-[11px] font-normal text-zinc-400">· {rangoTexto}</span>
+        </span>
+        <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', verAnalisis && 'rotate-180')} />
+      </button>
+
+      {verAnalisis && (
+      <div className="space-y-3">
       <div className="grid gap-3 lg:grid-cols-2">
         {/* Clientes con más ajuste */}
         <div className={CARD}>
@@ -1276,6 +1358,8 @@ export function VariacionesPage() {
           </div>
         </div>
       </div>
+      </div>
+      )}
     </div>
   );
 }
