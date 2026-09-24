@@ -743,8 +743,8 @@ export function VariacionesPage() {
   // ID de campaña, campo editado y dirección.
   const idq = idCampania.trim();
   const fil = imp.ediciones.filter((e) => {
-    if (campoFiltro === 'caras' && e.carasAntes == null) return false;
-    if (campoFiltro === 'monto' && !(e.invAntes != null || (e.monto ?? 0) !== 0)) return false;
+    if (campoFiltro === 'caras' && !e.cambioCaras) return false;
+    if (campoFiltro === 'monto' && !e.cambioTarifa) return false; // "Tarifa" = cambió la tarifa PÚBLICA (no cualquier inversión)
     if (campoFiltro === 'periodo' && e.tipoEdicion !== 'Cambio de periodo') return false;
     if (campoFiltro === 'eliminacion' && e.tipoEdicion !== 'Eliminar circuito') return false;
     if (plazasSel.length && !(e.plazas ?? []).some((p) => plazasSel.includes(p))) return false;
@@ -995,12 +995,13 @@ export function VariacionesPage() {
           <p className="-mt-1 text-[11px] text-zinc-400">Audit log con campaña, tipo, quién editó y el impacto en inversión · {filas.length} registros</p>
         </div>
         <div className="max-h-[460px] overflow-auto">
-          <table className="w-full min-w-[1040px] text-sm">
+          <table className="w-full min-w-[1140px] text-sm">
             <thead className="sticky top-0 bg-white/90 dark:bg-[#1a1025]/90">
               <tr className="text-left text-xs text-zinc-400">
                 <th className="py-1 pr-2">Fecha</th>
                 <th className="py-1 pr-2">Tipo</th>
                 <th className="py-1 pr-2">Campaña</th>
+                <th className="py-1 pr-2">ID</th>
                 <th className="py-1 pr-2">Artículo</th>
                 <th className="py-1 pr-2">Plaza</th>
                 <th className="py-1 pr-2">Formato</th>
@@ -1014,11 +1015,13 @@ export function VariacionesPage() {
             <tbody>
               {filas.map((e) => {
                 const esPeriodo = e.tipoEdicion === 'Cambio de periodo';
+                const esElim = e.tipoEdicion === 'Eliminar circuito' || e.tipoEdicion === 'Baja de reservas';
                 const unidadCant = e.unidad === 'impresiones' ? 'Impresiones' : 'Caras';
                 const campos: { label: string; tono: string }[] = [];
-                if (e.carasAntes != null) campos.push({ label: unidadCant, tono: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300' });
-                if (e.invAntes != null) campos.push({ label: 'Tarifa', tono: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' });
+                if (e.cambioCaras) campos.push({ label: unidadCant, tono: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300' });
+                if (e.cambioTarifa) campos.push({ label: 'Tarifa', tono: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' });
                 if (esPeriodo) campos.push({ label: 'Periodo', tono: 'bg-sky-500/15 text-sky-700 dark:text-sky-300' });
+                if (esElim) campos.push({ label: 'Eliminación', tono: 'bg-rose-500/15 text-rose-700 dark:text-rose-300' });
                 const art = (e.articulos ?? []).join(', ');
                 const plaza = (e.plazas ?? []).join(', ');
                 const fmt = e.formatoDetalle || (e.muebles ?? []).join(', ') || (e.formatos ?? []).join(', ');
@@ -1026,9 +1029,8 @@ export function VariacionesPage() {
                   <tr key={e.id} className="border-t border-purple-100/40 dark:border-purple-900/20">
                     <td className="py-1.5 pr-2 text-xs text-zinc-500">{new Date(e.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}</td>
                     <td className="py-1.5 pr-2"><span className={cn('whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-medium', tipoBadge(e.tipoEdicion))}>{e.tipoEdicion ?? '—'}</span></td>
-                    <td className="max-w-[150px] truncate py-1.5 pr-2 font-medium text-zinc-700 dark:text-zinc-200">
-                      {e.campania ?? '—'}{e.refId ? <span className="ml-1 text-[10px] font-normal text-zinc-400">#{e.refId}</span> : null}
-                    </td>
+                    <td className="max-w-[150px] truncate py-1.5 pr-2 font-medium text-zinc-700 dark:text-zinc-200">{e.campania ?? '—'}</td>
+                    <td className="py-1.5 pr-2 text-xs tabular-nums text-zinc-500 dark:text-zinc-400">{e.refId ?? '—'}</td>
                     <td className="max-w-[130px] truncate py-1.5 pr-2 text-xs text-zinc-500 dark:text-zinc-400" title={art}>{art || '—'}</td>
                     <td className="max-w-[120px] truncate py-1.5 pr-2 text-xs text-zinc-500 dark:text-zinc-400" title={plaza}>{plaza || '—'}</td>
                     <td className="max-w-[120px] truncate py-1.5 pr-2 text-xs text-zinc-500 dark:text-zinc-400" title={fmt}>{fmt || '—'}</td>
@@ -1040,22 +1042,36 @@ export function VariacionesPage() {
                         )) : <span className="text-xs text-zinc-400">—</span>}
                       </span>
                     </td>
+                    {/* Cantidad: polimórfica según el movimiento (caras / tarifa pública / $ eliminado / periodo). */}
                     <td className="py-1.5 pr-2 text-xs tabular-nums">
-                      {e.carasAntes != null ? (
+                      {esElim ? (
+                        <span className="text-zinc-600 dark:text-zinc-300">
+                          {e.monto != null && e.monto !== 0 ? formatCurrency(Math.abs(e.monto)) : `${Math.abs(e.caras)}`}
+                          <span className="mx-1 text-zinc-400">→</span>{e.monto != null && e.monto !== 0 ? '$0' : '0'}
+                        </span>
+                      ) : e.cambioTarifa && !e.cambioCaras && e.tarifaAntes != null ? (
+                        <span className="text-zinc-600 dark:text-zinc-300">{formatCurrency(e.tarifaAntes)} <span className="text-zinc-400">→</span> {formatCurrency(e.tarifaDespues ?? 0)}</span>
+                      ) : e.carasAntes != null ? (
                         <span className="text-zinc-600 dark:text-zinc-300">
                           {e.carasAntes} <span className="text-zinc-400">→</span> {e.carasDespues}
                           <span className={cn('ml-1', e.caras > 0 ? 'text-emerald-600 dark:text-emerald-400' : e.caras < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-400')}>({e.caras > 0 ? '+' : ''}{e.caras})</span>
                         </span>
+                      ) : esPeriodo ? (
+                        <span className="text-zinc-400" title="QEB no guarda el periodo antes/después, solo la marca de que se modificó">modificado</span>
                       ) : <span className="text-zinc-400">—</span>}
                     </td>
                     <td className="py-1.5 pr-2 text-xs tabular-nums">
                       {e.invAntes != null ? (
                         <span className="text-zinc-600 dark:text-zinc-300">{fmtM(e.invAntes)} <span className="text-zinc-400">→</span> {fmtM(e.invDespues ?? 0)}</span>
+                      ) : esElim && e.monto ? (
+                        <span className="text-zinc-600 dark:text-zinc-300">{fmtM(Math.abs(e.monto))} <span className="text-zinc-400">→</span> $0</span>
                       ) : <span className="text-zinc-400">—</span>}
                     </td>
                     {esPeriodo ? (
-                      <td className="py-1.5 text-right">
-                        <span className="whitespace-nowrap rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 dark:text-sky-300">Trasladado</span>
+                      // Cambio de periodo: monto NEUTRAL (traslada, no suma ni resta), sin signo.
+                      // OJO: QEB no guarda el monto trasladado en un traslado puro → suele salir "—".
+                      <td className="py-1.5 text-right tabular-nums text-zinc-500 dark:text-zinc-400">
+                        {e.monto != null && e.monto !== 0 ? formatCurrency(Math.abs(e.monto)) : '—'}
                       </td>
                     ) : (
                       <td className={cn('py-1.5 text-right tabular-nums font-medium', (e.monto ?? 0) > 0 ? 'text-emerald-600 dark:text-emerald-400' : (e.monto ?? 0) < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-400')}>
@@ -1065,7 +1081,7 @@ export function VariacionesPage() {
                   </tr>
                 );
               })}
-              {!filas.length && <tr><td colSpan={11} className="py-6 text-center text-xs text-zinc-400">Sin ediciones en el período</td></tr>}
+              {!filas.length && <tr><td colSpan={12} className="py-6 text-center text-xs text-zinc-400">Sin ediciones en el período</td></tr>}
             </tbody>
           </table>
         </div>
