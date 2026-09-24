@@ -653,6 +653,9 @@ export function VariacionesPage() {
   const [direccion, setDireccion] = useState<'todas' | 'alzas' | 'bajas'>('todas');
   const [verAnalisis, setVerAnalisis] = useState(false);        // desplegable "Ver más análisis"
   const [periodoSel, setPeriodoSel] = useState<number | null>(null); // bucket con click (drill-down)
+  const [basesSel, setBasesSel] = useState<string[]>(['CIMU', 'Trade']); // default CIMU+Trade
+  const [tiposArt, setTiposArt] = useState<string[]>(['RT', 'BF', 'IN']); // sin IM = sin impresiones por default
+  const [apsFiltro, setApsFiltro] = useState<'todos' | 'con' | 'sin'>('todos'); // posteado (con/sin APS)
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const ink = chartInk(isDark);
 
@@ -721,6 +724,7 @@ export function VariacionesPage() {
       campanias: uniq((e) => [e.campania]),
       marcas: uniq((e) => [e.marca]),
       status: uniq((e) => [e.status]),
+      bases: uniq((e) => [e.base]),
     };
   }, [imp]);
 
@@ -747,6 +751,7 @@ export function VariacionesPage() {
   const limpiar = () => {
     setGranularidad('mes'); setMesesSel([]); setSemsSel([]); setCatsSel([]); setPlazasSel([]); setFormatosSel([]); setMueblesSel([]);
     setClientesSel([]); setCampaniasSel([]); setMarcasSel([]); setStatusSel([]); setIdCampania(''); setAsesoresSel([]); setCampoFiltro('todos'); setDireccion('todas');
+    setBasesSel(['CIMU', 'Trade']); setTiposArt(['RT', 'BF', 'IN']); setApsFiltro('todos');
   };
 
   // Filtros: período, plaza/formato/mueble/asesor, cliente/campaña/marca (multi),
@@ -759,6 +764,14 @@ export function VariacionesPage() {
     if (campoFiltro === 'monto' && !e.cambioTarifa) return false; // "Tarifa" = cambió la tarifa PÚBLICA (no cualquier inversión)
     if (campoFiltro === 'periodo' && e.tipoEdicion !== 'Cambio de periodo') return false;
     if (campoFiltro === 'eliminacion' && e.tipoEdicion !== 'Eliminar circuito') return false;
+    // BASE (CIMU/Trade/UDC) — de solicitud.sap_database. Solo oculta bases CONOCIDAS
+    // fuera de la selección (las de base desconocida no se ocultan, para no perder datos).
+    if (basesSel.length && e.base && !basesSel.some((b) => b.toUpperCase() === (e.base as string).toUpperCase())) return false;
+    // Tipo de artículo por prefijo del código (RT/BF/IN/IM). Las ediciones sin artículo no se filtran.
+    if (tiposArt.length && (e.articulos?.length) && !e.articulos.some((a) => tiposArt.includes((a.split('-')[0] || '').toUpperCase()))) return false;
+    // Posteado (APS): con/sin APS asignado.
+    if (apsFiltro === 'con' && !e.tieneAps) return false;
+    if (apsFiltro === 'sin' && e.tieneAps) return false;
     if (plazasSel.length && !(e.plazas ?? []).some((p) => plazasSel.includes(p))) return false;
     if (formatosSel.length && !(e.formatos ?? []).some((f) => formatosSel.includes(f))) return false;
     if (mueblesSel.length && !(e.muebles ?? []).some((m) => mueblesSel.includes(m))) return false;
@@ -979,8 +992,9 @@ export function VariacionesPage() {
     : granularidad === 'semana' ? semsSel.map((w) => `Sem ${w}`) : [];
   const chipsActivos = [
     ...periodoLabels, ...plazasSel, ...formatosSel, ...mueblesSel, ...asesoresSel,
-    ...clientesSel, ...campaniasSel, ...marcasSel, ...statusSel, idq ? `ID ${idq}` : '',
+    ...clientesSel, ...campaniasSel, ...marcasSel, ...statusSel, ...basesSel, idq ? `ID ${idq}` : '',
     campoFiltro !== 'todos' ? campoFiltro : '', direccion !== 'todas' ? direccion : '',
+    apsFiltro !== 'todos' ? `APS: ${apsFiltro}` : '', !tiposArt.includes('IM') ? 'sin impresiones' : '',
   ].filter(Boolean) as string[];
   const resumenFiltros = chipsActivos.length
     ? chipsActivos.slice(0, 2).join(', ') + (chipsActivos.length > 2 ? ` +${chipsActivos.length - 2}` : '')
@@ -1017,6 +1031,7 @@ export function VariacionesPage() {
           <MultiSelectStr label="Campaña" opciones={opciones.campanias} sel={campaniasSel} onChange={setCampaniasSel} />
           <MultiSelectStr label="Marca" opciones={opciones.marcas} sel={marcasSel} onChange={setMarcasSel} />
           <MultiSelectStr label="Estatus" opciones={opciones.status} sel={statusSel} onChange={setStatusSel} />
+          <MultiSelectStr label="Base" opciones={opciones.bases} sel={basesSel} onChange={setBasesSel} />
           <label className="flex w-full items-center gap-1.5 text-xs sm:w-auto">
             <span className="w-24 shrink-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400 sm:w-auto">ID campaña</span>
             <input value={idCampania} onChange={(e) => setIdCampania(e.target.value)} inputMode="numeric" placeholder="Ej. 81220"
@@ -1035,9 +1050,21 @@ export function VariacionesPage() {
             <span className="text-xs text-zinc-500 dark:text-zinc-400">Dirección</span>
             <FiltroGrupo opciones={[['todas', 'Todas'], ['alzas', 'Alzas'], ['bajas', 'Bajas']]} valor={direccion} onSel={(v) => setDireccion(v as typeof direccion)} />
           </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">Tipo artículo</span>
+            {([['RT', 'Renta'], ['BF', 'Bonif.'], ['IN', 'Intercambio'], ['IM', 'Impresión']] as [string, string][]).map(([v, l]) => (
+              <button key={v} type="button" onClick={() => setTiposArt((p) => (p.includes(v) ? p.filter((x) => x !== v) : [...p, v]))}
+                className={cn('rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors', tiposArt.includes(v) ? 'bg-purple-500/20 text-purple-700 dark:text-purple-200' : 'bg-zinc-500/10 text-zinc-400')}>{l}</button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">APS</span>
+            <FiltroGrupo opciones={[['todos', 'Todos'], ['con', 'Con APS'], ['sin', 'Sin APS']]} valor={apsFiltro} onSel={(v) => setApsFiltro(v as typeof apsFiltro)} />
+          </div>
         </div>
         <p className="text-[11px] text-zinc-400">
           Plaza · Formato · Tipo de mueble corresponden a las caras exactas que se editaron en cada registro (por circuito/cara del historial).
+          {!tiposArt.includes('IM') && <span className="ml-1 font-medium text-amber-600 dark:text-amber-400">· No incluye impresiones (activa "Impresión" para verlas).</span>}
         </p>
       </BarraFiltros>
 

@@ -57,6 +57,10 @@ export interface EventoHistorial {
   plazas?: string[];
   formatos?: string[];
   muebles?: string[];
+  /** Base (sap_database): CIMU / TRADE / UDC. */
+  base?: string | null;
+  /** Alguna cara editada ya tiene APS asignado (posteado). */
+  tieneAps?: boolean;
 }
 
 export interface FiltrosHistorial {
