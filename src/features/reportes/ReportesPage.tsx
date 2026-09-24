@@ -1205,50 +1205,6 @@ export function VariacionesPage() {
         </div>
       )}
 
-      {/* Cómo se movió la venta acumulada (debajo de "Variación de inversión") */}
-      <div className={CARD}>
-        <CardTitle>Cómo se movió la venta acumulada por {unidad}</CardTitle>
-        <p className="-mt-1 mb-3 text-[11px] text-zinc-400">
-          Valor acumulado del <b>año</b> reconstruido: parte del acumulado al inicio (día 1) y aplica las variaciones
-          (alzas/bajas) período a período. El <b>valor al inicio es siempre el del año completo</b> — no cambia al filtrar un período.
-        </p>
-        <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <MetricCard titulo="Valor al inicio (año)" valor={formatCurrency(valorInicio)} sub={fechaBaseIni ? `desde ${fmtFecha(fechaBaseIni)}` : `Inicio ${anio}`} tono="neutral" accent={ACCENTS[0]} />
-          <MetricCard titulo="Δ por caras" valor={`${aporteCaras >= 0 ? '+' : ''}${formatCurrency(aporteCaras)}`} sub={`${pctInicio(aporteCaras).toFixed(1)}% del valor inicial`} tono={aporteCaras >= 0 ? 'up' : 'down'} accent={ACCENTS[1]} />
-          <MetricCard titulo="Δ por tarifa" valor={`${aporteTarifa >= 0 ? '+' : ''}${formatCurrency(aporteTarifa)}`} sub={`${pctInicio(aporteTarifa).toFixed(1)}% del valor inicial`} tono={aporteTarifa >= 0 ? 'up' : 'down'} accent={ACCENTS[2]} />
-          <MetricCard titulo={periodoActivo ? 'Venta acum. (fin período)' : 'Venta acumulada hoy'} valor={formatCurrency(anchorTotal)} sub={`${pctInicio(D) >= 0 ? '▲ +' : '▼ '}${pctInicio(D).toFixed(1)}% vs inicio`} tono={D >= 0 ? 'up' : 'down'} accent={ACCENTS[3]} />
-        </div>
-        <ResponsiveContainer width="100%" height={280}>
-          <ComposedChart data={trayectoria} margin={{ top: 12, right: 12, left: 0, bottom: 4 }}>
-            <defs>
-              <linearGradient id="gradTray" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid stroke={ink.grid} vertical={false} />
-            <XAxis dataKey="etiqueta" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
-            <YAxis domain={domY} tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
-            <Tooltip content={
-              <TooltipChart
-                format={(v, _n, p) => {
-                  const d = p && typeof p.delta === 'number' ? (p.delta as number) : 0;
-                  const pct = p && typeof p.pct === 'number' ? (p.pct as number) : null;
-                  if (d === 0) return formatCurrency(v);
-                  const flecha = d > 0 ? '▲ +' : '▼ ';
-                  const pctTxt = pct != null ? ` · ${flecha}${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%` : ` · ${d > 0 ? '+' : ''}`;
-                  return `${formatCurrency(v)} (${d > 0 ? '+' : ''}${formatCurrency(d)}${pctTxt})`;
-                }}
-              />
-            } />
-            <Area type="monotone" dataKey="total" name="Venta acumulada" stroke="#8b5cf6" strokeWidth={2.5} fill="url(#gradTray)" dot={{ r: 3, fill: '#8b5cf6' }} activeDot={{ r: 5 }} />
-          </ComposedChart>
-        </ResponsiveContainer>
-        <p className="mt-1 text-[11px] text-zinc-400">
-          Valor acumulado por {unidad}: baja los períodos con más bajas y sube los que tienen más alzas, hasta el valor de hoy. Pasa el mouse por cada punto para ver el cambio ($ y %).
-        </p>
-      </div>
-
       {/* Ver más análisis — desplegable con el detalle (clientes, tipo, asesor, plaza). */}
       <button
         onClick={() => setVerAnalisis((v) => !v)}
@@ -1360,6 +1316,50 @@ export function VariacionesPage() {
       </div>
       </div>
       )}
+
+      {/* Cómo se movió la venta acumulada */}
+      <div className={CARD}>
+        <CardTitle>Cómo se movió la venta acumulada por {unidad}</CardTitle>
+        <p className="-mt-1 mb-3 text-[11px] text-zinc-400">
+          Valor acumulado del <b>año</b> reconstruido: parte del acumulado al inicio (día 1) y aplica las variaciones
+          (alzas/bajas) período a período. El <b>valor al inicio es siempre el del año completo</b> — no cambia al filtrar un período.
+        </p>
+        <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <MetricCard titulo="Valor al inicio (año)" valor={formatCurrency(valorInicio)} sub={fechaBaseIni ? `desde ${fmtFecha(fechaBaseIni)}` : `Inicio ${anio}`} tono="neutral" accent={ACCENTS[0]} />
+          <MetricCard titulo="Δ por caras" valor={`${aporteCaras >= 0 ? '+' : ''}${formatCurrency(aporteCaras)}`} sub={`${pctInicio(aporteCaras).toFixed(1)}% del valor inicial`} tono={aporteCaras >= 0 ? 'up' : 'down'} accent={ACCENTS[1]} />
+          <MetricCard titulo="Δ por tarifa" valor={`${aporteTarifa >= 0 ? '+' : ''}${formatCurrency(aporteTarifa)}`} sub={`${pctInicio(aporteTarifa).toFixed(1)}% del valor inicial`} tono={aporteTarifa >= 0 ? 'up' : 'down'} accent={ACCENTS[2]} />
+          <MetricCard titulo={periodoActivo ? 'Venta acum. (fin período)' : 'Venta acumulada hoy'} valor={formatCurrency(anchorTotal)} sub={`${pctInicio(D) >= 0 ? '▲ +' : '▼ '}${pctInicio(D).toFixed(1)}% vs inicio`} tono={D >= 0 ? 'up' : 'down'} accent={ACCENTS[3]} />
+        </div>
+        <ResponsiveContainer width="100%" height={280}>
+          <ComposedChart data={trayectoria} margin={{ top: 12, right: 12, left: 0, bottom: 4 }}>
+            <defs>
+              <linearGradient id="gradTray" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke={ink.grid} vertical={false} />
+            <XAxis dataKey="etiqueta" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
+            <YAxis domain={domY} tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
+            <Tooltip content={
+              <TooltipChart
+                format={(v, _n, p) => {
+                  const d = p && typeof p.delta === 'number' ? (p.delta as number) : 0;
+                  const pct = p && typeof p.pct === 'number' ? (p.pct as number) : null;
+                  if (d === 0) return formatCurrency(v);
+                  const flecha = d > 0 ? '▲ +' : '▼ ';
+                  const pctTxt = pct != null ? ` · ${flecha}${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%` : ` · ${d > 0 ? '+' : ''}`;
+                  return `${formatCurrency(v)} (${d > 0 ? '+' : ''}${formatCurrency(d)}${pctTxt})`;
+                }}
+              />
+            } />
+            <Area type="monotone" dataKey="total" name="Venta acumulada" stroke="#8b5cf6" strokeWidth={2.5} fill="url(#gradTray)" dot={{ r: 3, fill: '#8b5cf6' }} activeDot={{ r: 5 }} />
+          </ComposedChart>
+        </ResponsiveContainer>
+        <p className="mt-1 text-[11px] text-zinc-400">
+          Valor acumulado por {unidad}: baja los períodos con más bajas y sube los que tienen más alzas, hasta el valor de hoy. Pasa el mouse por cada punto para ver el cambio ($ y %).
+        </p>
+      </div>
     </div>
   );
 }
