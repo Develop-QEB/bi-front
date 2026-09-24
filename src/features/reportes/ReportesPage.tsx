@@ -671,7 +671,9 @@ export function VariacionesPage() {
   // Venta real del período (V_APS) según el alcance filtrado + comparación vs el
   // período inmediato anterior (solo cuando hay un único período seleccionado).
   useEffect(() => {
-    setVentaTotal(null); setVentaPrev(null);
+    // NO reseteamos a null en cada corrida (el WS incrementa `tick` seguido y causaba
+    // el "brinco" de números a "…" y de vuelta). Stale-while-revalidate: se mantiene el
+    // valor previo hasta que llega el nuevo. `ventaPrev` sí se limpia si ya no aplica.
     // V_APS filtra por un valor único; si hay varios seleccionados, la venta total
     // muestra todos (el detalle sí se filtra en la tabla). Mismo criterio que cliente.
     const uniq1 = (a: string[]) => (a.length === 1 ? a[0] : null);
@@ -694,6 +696,8 @@ export function VariacionesPage() {
       : null;
     if (uno && uno.v > 1) {
       getVentaTotal({ ...base, [uno.key]: [uno.v - 1] }).then(setVentaPrev).catch(() => setVentaPrev(null));
+    } else {
+      setVentaPrev(null); // ya no aplica comparación vs previo → limpiar (evita valor viejo)
     }
 
     // Venta real V_APS por período (para la línea de "Venta neta total" del chart).
