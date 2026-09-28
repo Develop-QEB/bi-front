@@ -20,6 +20,8 @@ function qsFiltros(f: Partial<FiltrosReporte>): string {
   if (f.meses?.length) p.set('meses', f.meses.join(','));
   if (f.catorcenas?.length) p.set('catorcenas', f.catorcenas.join(','));
   if (f.semanas?.length) p.set('semanas', f.semanas.join(','));
+  if (f.bases?.length) p.set('bases', f.bases.join(','));
+  if (f.tipos?.length) p.set('tipos', f.tipos.join(','));
   return p.toString();
 }
 

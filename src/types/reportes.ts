@@ -34,6 +34,8 @@ export interface FiltrosReporte {
   meses?: number[];
   catorcenas?: number[];
   semanas?: number[];
+  bases?: string[];
+  tipos?: string[];
 }
 
 export interface OpcionesReporte {

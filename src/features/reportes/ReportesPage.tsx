@@ -147,11 +147,13 @@ export function EmbudoPage() {
 
   // Barra de filtros compartida (afecta toda la tab).
   const [granularidad, setGranularidad] = useState<'mes' | 'anio'>('mes');
-  const [filtros, setFiltros] = useState<FiltrosReporte>({ anio: ANIO, mes: null, plaza: null, formato: null, mueble: null, cliente: null, asesor: null });
+  const [filtros, setFiltros] = useState<FiltrosReporte>({ anio: ANIO, mes: null, plaza: null, formato: null, mueble: null, cliente: null, asesor: null, bases: ['CIMU', 'TRADE'], tipos: ['RT', 'BF', 'IN'] });
   const [opciones, setOpciones] = useState<OpcionesReporte>({ plaza: [], formato: [], mueble: [], cliente: [], asesor: [] });
   const setF = (k: keyof FiltrosReporte, v: string | number | null) =>
     setFiltros((f) => ({ ...f, [k]: v === '' ? null : v }));
-  const limpiar = () => { setGranularidad('mes'); setFiltros((f) => ({ anio: f.anio, mes: null, plaza: null, formato: null, mueble: null, cliente: null, asesor: null })); };
+  const toggleF = (k: 'bases' | 'tipos', v: string) =>
+    setFiltros((f) => { const cur = (f[k] ?? []) as string[]; return { ...f, [k]: cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v] }; });
+  const limpiar = () => { setGranularidad('mes'); setFiltros((f) => ({ anio: f.anio, mes: null, plaza: null, formato: null, mueble: null, cliente: null, asesor: null, bases: ['CIMU', 'TRADE'], tipos: ['RT', 'BF', 'IN'] })); };
 
   const [tick, setTick] = useState(0); // re-carga en vivo con el WS
   const estadoWS = useLiveRefresh(() => setTick((t) => t + 1));
@@ -238,6 +240,25 @@ export function EmbudoPage() {
             Limpiar
           </button>
         </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">Base</span>
+            {(['CIMU', 'TRADE', 'UDC'] as const).map((b) => (
+              <button key={b} type="button" onClick={() => toggleF('bases', b)}
+                className={cn('rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors', (filtros.bases ?? []).includes(b) ? 'bg-purple-500/20 text-purple-700 dark:text-purple-200' : 'bg-zinc-500/10 text-zinc-400')}>{b}</button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">Tipo artículo</span>
+            {([['RT', 'Renta'], ['BF', 'Bonif.'], ['IN', 'Intercambio'], ['IM', 'Impresión']] as [string, string][]).map(([v, l]) => (
+              <button key={v} type="button" onClick={() => toggleF('tipos', v)}
+                className={cn('rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors', (filtros.tipos ?? []).includes(v) ? 'bg-purple-500/20 text-purple-700 dark:text-purple-200' : 'bg-zinc-500/10 text-zinc-400')}>{l}</button>
+            ))}
+          </div>
+        </div>
+        {!(filtros.tipos ?? []).includes('IM') && (
+          <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400">No incluye impresiones (activa "Impresión" para verlas).</p>
+        )}
       </BarraFiltros>
 
       {/* 6 KPI con barra de gradiente */}
