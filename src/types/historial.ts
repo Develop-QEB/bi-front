@@ -47,6 +47,9 @@ export interface EventoHistorial {
   /** Qué cambió realmente (para chips y filtro "Movimiento"). */
   cambioCaras?: boolean;
   cambioTarifa?: boolean;
+  /** Periodo antes/después (QEB ya lo registra). */
+  periodoAntes?: string | null;
+  periodoDespues?: string | null;
   /** Eliminación ejecutada vía autorización (atribuida al gerente que autorizó). */
   viaAutorizacion?: boolean;
   // Atributos EXACTOS de las caras editadas (solo en /reportes/impacto, filtros del jefe).

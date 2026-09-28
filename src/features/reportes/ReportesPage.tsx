@@ -1158,7 +1158,11 @@ export function VariacionesPage() {
                           <span className={cn('ml-1', e.caras > 0 ? 'text-emerald-600 dark:text-emerald-400' : e.caras < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-400')}>({e.caras > 0 ? '+' : ''}{e.caras})</span>
                         </span>
                       ) : esPeriodo ? (
-                        <span className="text-zinc-400" title="QEB no guarda el periodo antes/después, solo la marca de que se modificó">modificado</span>
+                        (e.periodoAntes || e.periodoDespues) ? (
+                          <span className="text-zinc-600 dark:text-zinc-300 whitespace-nowrap">
+                            <span className="mr-1 text-[10px] uppercase text-zinc-400">Periodo</span>{e.periodoAntes ?? '—'} <span className="text-zinc-400">→</span> {e.periodoDespues ?? '—'}
+                          </span>
+                        ) : <span className="text-zinc-400" title="Este registro es anterior a que QEB empezara a guardar el periodo antes/después">modificado</span>
                       ) : <span className="text-zinc-400">—</span>}
                     </td>
                     <td className="py-1.5 pr-2 text-xs tabular-nums">
