@@ -602,25 +602,49 @@ function MultiSelectStr({ label, opciones, sel, onChange }: { label: string; opc
   );
 }
 
-// Contenedor de la barra de filtros. En escritorio (lg+) queda pegado (sticky) al
-// hacer scroll; en móvil Y TABLET (iPad) es un panel colapsable que fluye con la
-// página (no se queda pegado tapando/empujando el contenido al hacer scroll).
+// ¿La pantalla es "compacta"? = celular/tablet/iPad (puntero táctil en cualquier
+// orientación) O ventana angosta. Detectar por PUNTERO cubre el iPad landscape
+// (que es más ancho que 1024px y por breakpoint de ancho se veía como escritorio).
+function useEsCompacto(): boolean {
+  const Q = '(pointer: coarse), (max-width: 1023px)';
+  const [compacto, setCompacto] = useState(() =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(Q).matches : false
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia(Q);
+    const on = () => setCompacto(mq.matches);
+    on();
+    mq.addEventListener?.('change', on);
+    window.addEventListener('resize', on);
+    return () => { mq.removeEventListener?.('change', on); window.removeEventListener('resize', on); };
+  }, []);
+  return compacto;
+}
+
+// Contenedor de la barra de filtros. En ESCRITORIO (puntero de mouse) queda pegado
+// (sticky) al hacer scroll y siempre abierto. En CELULAR y iPad (puntero táctil, en
+// cualquier orientación) es un panel colapsable que fluye con la página: arranca
+// cerrado y no se queda pegado tapando/empujando el contenido al hacer scroll.
 function BarraFiltros({ children, resumen }: { children: ReactNode; resumen?: ReactNode }) {
+  const compacto = useEsCompacto();
   const [abierto, setAbierto] = useState(false);
   useCloseOnRotate(abierto, () => setAbierto(false));
   return (
-    <div className={cn(CARD, '!p-3', 'lg:sticky lg:z-20 lg:top-[calc(var(--bi-header-h,104px)_+_8px)]')}>
-      <button
-        onClick={() => setAbierto((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 text-xs font-medium text-purple-700 dark:text-purple-200 lg:hidden"
-      >
-        <span className="flex items-center gap-1.5"><SlidersHorizontal className="h-4 w-4" /> Filtros</span>
-        <span className="flex min-w-0 items-center gap-2">
-          {resumen && <span className="truncate text-[11px] font-normal text-zinc-500 dark:text-zinc-400">{resumen}</span>}
-          <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', abierto && 'rotate-180')} />
-        </span>
-      </button>
-      <div className={cn('space-y-3', abierto ? 'mt-3 lg:mt-0' : 'hidden lg:block')}>
+    <div className={cn(CARD, '!p-3', !compacto && 'sticky z-20 top-[calc(var(--bi-header-h,104px)_+_8px)]')}>
+      {compacto && (
+        <button
+          onClick={() => setAbierto((v) => !v)}
+          className="flex w-full items-center justify-between gap-2 text-xs font-medium text-purple-700 dark:text-purple-200"
+        >
+          <span className="flex items-center gap-1.5"><SlidersHorizontal className="h-4 w-4" /> Filtros</span>
+          <span className="flex min-w-0 items-center gap-2">
+            {resumen && <span className="truncate text-[11px] font-normal text-zinc-500 dark:text-zinc-400">{resumen}</span>}
+            <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', abierto && 'rotate-180')} />
+          </span>
+        </button>
+      )}
+      <div className={cn('space-y-3', compacto && (abierto ? 'mt-3' : 'hidden'))}>
         {children}
       </div>
     </div>
