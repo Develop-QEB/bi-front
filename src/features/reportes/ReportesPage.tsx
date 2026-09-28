@@ -1195,9 +1195,14 @@ export function VariacionesPage() {
                     </td>
                     {esPeriodo ? (
                       // Cambio de periodo: monto NEUTRAL (traslada, no suma ni resta), sin signo.
-                      // OJO: QEB no guarda el monto trasladado en un traslado puro → suele salir "—".
+                      // El monto trasladado = inversión total de la campaña (invAntes, derivado en el back).
                       <td className="py-1.5 text-right tabular-nums text-zinc-500 dark:text-zinc-400">
-                        {e.monto != null && e.monto !== 0 ? formatCurrency(Math.abs(e.monto)) : '—'}
+                        {(() => {
+                          const t = e.monto != null && e.monto !== 0 ? Math.abs(e.monto) : (e.invAntes ?? null);
+                          return t != null ? (
+                            <span title="Monto trasladado (la inversión no cambia, solo de periodo)">{formatCurrency(t)}</span>
+                          ) : '—';
+                        })()}
                       </td>
                     ) : (
                       <td className={cn('py-1.5 text-right tabular-nums font-medium', (e.monto ?? 0) > 0 ? 'text-emerald-600 dark:text-emerald-400' : (e.monto ?? 0) < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-400')}>
