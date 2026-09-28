@@ -22,6 +22,8 @@ function qsFiltros(f: Partial<FiltrosReporte>): string {
   if (f.semanas?.length) p.set('semanas', f.semanas.join(','));
   if (f.bases?.length) p.set('bases', f.bases.join(','));
   if (f.tipos?.length) p.set('tipos', f.tipos.join(','));
+  if (f.muebles?.length) p.set('muebles', f.muebles.join(','));
+  if (f.digital?.length) p.set('digital', f.digital.join(','));
   return p.toString();
 }
 

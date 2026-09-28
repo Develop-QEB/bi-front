@@ -36,6 +36,8 @@ export interface FiltrosReporte {
   semanas?: number[];
   bases?: string[];
   tipos?: string[];
+  muebles?: string[]; // Formato: PARABUS/COLUMNA/MACRO (Gran Formato)
+  digital?: string[]; // Tradicional/Digital
 }
 
 export interface OpcionesReporte {

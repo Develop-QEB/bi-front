@@ -147,13 +147,13 @@ export function EmbudoPage() {
 
   // Barra de filtros compartida (afecta toda la tab).
   const [granularidad, setGranularidad] = useState<'mes' | 'anio'>('mes');
-  const [filtros, setFiltros] = useState<FiltrosReporte>({ anio: ANIO, mes: null, plaza: null, formato: null, mueble: null, cliente: null, asesor: null, bases: ['CIMU', 'TRADE'], tipos: ['RT', 'BF', 'IN'] });
+  const [filtros, setFiltros] = useState<FiltrosReporte>({ anio: ANIO, mes: null, plaza: null, formato: null, mueble: null, cliente: null, asesor: null, bases: ['CIMU', 'TRADE'], tipos: ['RT', 'BF', 'IN'], muebles: [], digital: [] });
   const [opciones, setOpciones] = useState<OpcionesReporte>({ plaza: [], formato: [], mueble: [], cliente: [], asesor: [] });
   const setF = (k: keyof FiltrosReporte, v: string | number | null) =>
     setFiltros((f) => ({ ...f, [k]: v === '' ? null : v }));
-  const toggleF = (k: 'bases' | 'tipos', v: string) =>
+  const toggleF = (k: CatKey, v: string) =>
     setFiltros((f) => { const cur = (f[k] ?? []) as string[]; return { ...f, [k]: cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v] }; });
-  const limpiar = () => { setGranularidad('mes'); setFiltros((f) => ({ anio: f.anio, mes: null, plaza: null, formato: null, mueble: null, cliente: null, asesor: null, bases: ['CIMU', 'TRADE'], tipos: ['RT', 'BF', 'IN'] })); };
+  const limpiar = () => { setGranularidad('mes'); setFiltros((f) => ({ anio: f.anio, mes: null, plaza: null, formato: null, mueble: null, cliente: null, asesor: null, bases: ['CIMU', 'TRADE'], tipos: ['RT', 'BF', 'IN'], muebles: [], digital: [] })); };
 
   const [tick, setTick] = useState(0); // re-carga en vivo con el WS
   const estadoWS = useLiveRefresh(() => setTick((t) => t + 1));
@@ -232,30 +232,13 @@ export function EmbudoPage() {
             <SelectBox label="Mes" valor={String(filtros.mes ?? 0)} opciones={[['0', 'Todos'], ...MESES.map((m, i) => [String(i + 1), m] as [string, string])]} onSel={(v) => setF('mes', Number(v) || null)} />
           )}
           <SelectBox label="Plaza" valor={filtros.plaza ?? ''} opciones={conTodos(opciones.plaza)} onSel={(v) => setF('plaza', v)} />
-          <SelectBox label="Formato" valor={filtros.formato ?? ''} opciones={conTodos(opciones.formato)} onSel={(v) => setF('formato', v)} />
-          <SelectBox label="Tipo de mueble" valor={filtros.mueble ?? ''} opciones={conTodos(opciones.mueble)} onSel={(v) => setF('mueble', v)} />
           <SelectBox label="Cliente" valor={filtros.cliente ?? ''} opciones={conTodos(opciones.cliente)} onSel={(v) => setF('cliente', v)} />
           <SelectBox label="Asesor" valor={filtros.asesor ?? ''} opciones={conTodos(opciones.asesor)} onSel={(v) => setF('asesor', v)} />
           <button onClick={limpiar} className="rounded-lg border border-purple-200/60 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-500/10 dark:border-purple-900/40 dark:text-purple-200">
             Limpiar
           </button>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">Base</span>
-            {(['CIMU', 'TRADE', 'UDC'] as const).map((b) => (
-              <button key={b} type="button" onClick={() => toggleF('bases', b)}
-                className={cn('rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors', (filtros.bases ?? []).includes(b) ? 'bg-purple-500/20 text-purple-700 dark:text-purple-200' : 'bg-zinc-500/10 text-zinc-400')}>{b}</button>
-            ))}
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">Tipo artículo</span>
-            {([['RT', 'Renta'], ['BF', 'Bonif.'], ['IN', 'Intercambio'], ['IM', 'Impresión']] as [string, string][]).map(([v, l]) => (
-              <button key={v} type="button" onClick={() => toggleF('tipos', v)}
-                className={cn('rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors', (filtros.tipos ?? []).includes(v) ? 'bg-purple-500/20 text-purple-700 dark:text-purple-200' : 'bg-zinc-500/10 text-zinc-400')}>{l}</button>
-            ))}
-          </div>
-        </div>
+        <FiltrosCategoria bases={filtros.bases ?? []} tipos={filtros.tipos ?? []} muebles={filtros.muebles ?? []} digital={filtros.digital ?? []} onToggle={toggleF} />
         {!(filtros.tipos ?? []).includes('IM') && (
           <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400">No incluye impresiones (activa "Impresión" para verlas).</p>
         )}
@@ -463,11 +446,50 @@ function FiltroGrupo({ opciones, valor, onSel }: { opciones: [string, string][];
   );
 }
 
+// ---- Filtros por categoría (idénticos en Variaciones y Embudo) ----
+// 4 grupos de chips: Base, Tipo de artículo, Formato, Tradicional/Digital.
+// Vacío en cada grupo = "todos" (no filtra). Los valores son las claves que
+// entiende el back (bases=CIMU/TRADE/UDC, tipos=RT/BF/IN/IM, muebles=PARABUS/
+// COLUMNA/MACRO [Gran Formato=Mi Macro], digital=Tradicional/Digital).
+type CatKey = 'bases' | 'tipos' | 'muebles' | 'digital';
+const CAT_OPS: Record<CatKey, [string, string][]> = {
+  bases: [['CIMU', 'CIMU'], ['TRADE', 'Trade'], ['UDC', 'UDC']],
+  tipos: [['RT', 'Renta'], ['BF', 'Bonif.'], ['IN', 'Intercambio'], ['IM', 'Impresión']],
+  muebles: [['PARABUS', 'Parabús'], ['COLUMNA', 'Columna'], ['MACRO', 'Gran Formato']],
+  digital: [['Tradicional', 'Tradicional'], ['Digital', 'Digital']],
+};
+
+function ChipsGrupo({ label, ops, sel, onToggle }: { label: string; ops: [string, string][]; sel: string[]; onToggle: (v: string) => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-xs text-zinc-500 dark:text-zinc-400">{label}</span>
+      {ops.map(([v, l]) => (
+        <button key={v} type="button" onClick={() => onToggle(v)}
+          className={cn('rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors', sel.includes(v) ? 'bg-purple-500/20 text-purple-700 dark:text-purple-200' : 'bg-zinc-500/10 text-zinc-400')}>{l}</button>
+      ))}
+    </div>
+  );
+}
+
+function FiltrosCategoria({ bases, tipos, muebles, digital, onToggle }: {
+  bases: string[]; tipos: string[]; muebles: string[]; digital: string[]; onToggle: (g: CatKey, v: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
+      <ChipsGrupo label="Base" ops={CAT_OPS.bases} sel={bases} onToggle={(v) => onToggle('bases', v)} />
+      <ChipsGrupo label="Tipo de artículo" ops={CAT_OPS.tipos} sel={tipos} onToggle={(v) => onToggle('tipos', v)} />
+      <ChipsGrupo label="Formato" ops={CAT_OPS.muebles} sel={muebles} onToggle={(v) => onToggle('muebles', v)} />
+      <ChipsGrupo label="Tradicional / Digital" ops={CAT_OPS.digital} sel={digital} onToggle={(v) => onToggle('digital', v)} />
+    </div>
+  );
+}
+
 // Dropdown etiquetado (para la barra de filtros del jefe).
-// Dropdown de selección ÚNICA, con el mismo estilo morado que los multi-select
-// (antes usaba <select> nativo → el navegador lo pintaba distinto a los demás).
+// Dropdown de selección ÚNICA, con buscador arriba (para listas largas como
+// Cliente/Asesor) y el mismo estilo morado que los multi-select.
 function SelectBox({ label, valor, opciones, onSel }: { label: string; valor: string; opciones: [string, string][]; onSel: (v: string) => void }) {
   const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -475,8 +497,11 @@ function SelectBox({ label, valor, opciones, onSel }: { label: string; valor: st
     document.addEventListener('pointerdown', h);
     return () => document.removeEventListener('pointerdown', h);
   }, [open]);
+  useEffect(() => { if (!open) setQ(''); }, [open]); // limpia el buscador al cerrar
   useCloseOnRotate(open, () => setOpen(false));
   const actual = opciones.find(([v]) => v === valor)?.[1] ?? valor;
+  const conBuscador = opciones.length > 8; // solo listas largas (Cliente, Asesor, Plaza…)
+  const filtradas = q ? opciones.filter(([, l]) => l.toLowerCase().includes(q.toLowerCase())) : opciones;
   return (
     <div ref={ref} className="relative flex w-full items-center gap-1.5 text-xs sm:w-auto">
       <span className="w-24 shrink-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400 sm:w-auto">{label}</span>
@@ -488,18 +513,27 @@ function SelectBox({ label, valor, opciones, onSel }: { label: string; valor: st
         <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 transition-transform', open && 'rotate-180')} />
       </button>
       {open && (
-        <div className="absolute left-0 top-full z-40 mt-1 max-h-64 w-44 overflow-auto rounded-lg border border-purple-200/60 bg-white p-1 shadow-2xl dark:border-purple-900/40 dark:bg-[#241633]">
-          {opciones.map(([v, l]) => (
-            <button
-              key={v} type="button" onClick={() => { onSel(v); setOpen(false); }}
-              className={cn(
-                'flex w-full items-center rounded px-2 py-1.5 text-left text-xs',
-                v === valor ? 'bg-purple-500/15 font-medium text-purple-700 dark:text-purple-200' : 'text-zinc-700 hover:bg-purple-500/10 dark:text-zinc-200'
-              )}
-            >
-              <span className="truncate">{l}</span>
-            </button>
-          ))}
+        <div className="absolute left-0 top-full z-40 mt-1 w-56 rounded-lg border border-purple-200/60 bg-white p-1 shadow-2xl dark:border-purple-900/40 dark:bg-[#241633]">
+          {conBuscador && (
+            <input
+              autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Buscar ${label.toLowerCase()}…`}
+              className="mb-1 w-full rounded-md border border-purple-200/60 bg-white/80 px-2 py-1.5 text-xs outline-none focus:border-purple-400 dark:border-purple-900/40 dark:bg-[#1a1025] dark:text-zinc-200"
+            />
+          )}
+          <div className="max-h-56 overflow-auto">
+            {filtradas.map(([v, l]) => (
+              <button
+                key={v} type="button" onClick={() => { onSel(v); setOpen(false); }}
+                className={cn(
+                  'flex w-full items-center rounded px-2 py-1.5 text-left text-xs',
+                  v === valor ? 'bg-purple-500/15 font-medium text-purple-700 dark:text-purple-200' : 'text-zinc-700 hover:bg-purple-500/10 dark:text-zinc-200'
+                )}
+              >
+                <span className="truncate">{l}</span>
+              </button>
+            ))}
+            {!filtradas.length && <p className="px-2 py-2 text-[11px] text-zinc-400">Sin coincidencias</p>}
+          </div>
         </div>
       )}
     </div>
@@ -687,8 +721,8 @@ export function VariacionesPage() {
   const [catsSel, setCatsSel] = useState<number[]>([]);   // catorcenas
   const [catCal, setCatCal] = useState<CatorcenaCal[]>([]); // calendario de catorcenas del año
   const [plazasSel, setPlazasSel] = useState<string[]>([]);       // multi + búsqueda
-  const [formatosSel, setFormatosSel] = useState<string[]>([]);   // multi + búsqueda
-  const [mueblesSel, setMueblesSel] = useState<string[]>([]);     // multi + búsqueda
+  const [digitalSel, setDigitalSel] = useState<string[]>([]);   // multi + búsqueda
+  const [muebleSel, setMuebleSel] = useState<string[]>([]);     // multi + búsqueda
   const [asesoresSel, setAsesoresSel] = useState<string[]>([]);   // multi + búsqueda
   const [clientesSel, setClientesSel] = useState<string[]>([]);   // multi + búsqueda
   const [campaniasSel, setCampaniasSel] = useState<string[]>([]); // multi + búsqueda
@@ -727,7 +761,7 @@ export function VariacionesPage() {
     // muestra todos (el detalle sí se filtra en la tabla). Mismo criterio que cliente.
     const uniq1 = (a: string[]) => (a.length === 1 ? a[0] : null);
     const clienteUnico = uniq1(clientesSel);
-    const base = { anio, plaza: uniq1(plazasSel), formato: uniq1(formatosSel), mueble: uniq1(mueblesSel), cliente: clienteUnico, asesor: uniq1(asesoresSel) };
+    const base: Partial<FiltrosReporte> = { anio, plaza: uniq1(plazasSel), digital: digitalSel, muebles: muebleSel, cliente: clienteUnico, asesor: uniq1(asesoresSel) };
     const per: Partial<FiltrosReporte> =
       granularidad === 'mes' ? { meses: mesesSel }
       : granularidad === 'catorcena' ? { catorcenas: catsSel }
@@ -754,7 +788,7 @@ export function VariacionesPage() {
     getVentasPeriodo(uni as Periodo, { ...base, ...per })
       .then((rows) => setVentasPeriodo(Object.fromEntries(rows.map((r) => [r.periodo, r.monto]))))
       .catch(() => setVentasPeriodo({}));
-  }, [anio, granularidad, mesesSel, catsSel, semsSel, plazasSel, formatosSel, mueblesSel, clientesSel, asesoresSel, tick]);
+  }, [anio, granularidad, mesesSel, catsSel, semsSel, plazasSel, digitalSel, muebleSel, clientesSel, asesoresSel, tick]);
 
   // Opciones de los dropdowns, derivadas del universo de ediciones del año.
   const opciones = useMemo(() => {
@@ -795,9 +829,14 @@ export function VariacionesPage() {
   const catorcenasDisp = [...new Set(imp.ediciones.map((e) => catDe(e.fecha)).filter((c) => c > 0))].sort((a, b) => a - b);
 
   const limpiar = () => {
-    setGranularidad('mes'); setMesesSel([]); setSemsSel([]); setCatsSel([]); setPlazasSel([]); setFormatosSel([]); setMueblesSel([]);
+    setGranularidad('mes'); setMesesSel([]); setSemsSel([]); setCatsSel([]); setPlazasSel([]); setDigitalSel([]); setMuebleSel([]);
     setClientesSel([]); setCampaniasSel([]); setMarcasSel([]); setStatusSel([]); setIdCampania(''); setAsesoresSel([]); setCampoFiltro('todos'); setDireccion('todas');
     setBasesSel(['CIMU', 'TRADE']); setTiposArt(['RT', 'BF', 'IN']); setApsFiltro('todos');
+  };
+  // Toggle de los 4 grupos de categoría (mismos que en Embudo).
+  const toggleCat = (g: CatKey, v: string) => {
+    const setr = g === 'bases' ? setBasesSel : g === 'tipos' ? setTiposArt : g === 'muebles' ? setMuebleSel : setDigitalSel;
+    setr((cur) => (cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]));
   };
 
   // Filtros: período, plaza/formato/mueble/asesor, cliente/campaña/marca (multi),
@@ -819,8 +858,10 @@ export function VariacionesPage() {
     if (apsFiltro === 'con' && !e.tieneAps) return false;
     if (apsFiltro === 'sin' && e.tieneAps) return false;
     if (plazasSel.length && !(e.plazas ?? []).some((p) => plazasSel.includes(p))) return false;
-    if (formatosSel.length && !(e.formatos ?? []).some((f) => formatosSel.includes(f))) return false;
-    if (mueblesSel.length && !(e.muebles ?? []).some((m) => mueblesSel.includes(m))) return false;
+    // Tradicional / Digital (e.formatos = solicitudCaras.tipo).
+    if (digitalSel.length && !(e.formatos ?? []).some((f) => digitalSel.some((d) => f.toLowerCase() === d.toLowerCase()))) return false;
+    // Formato (Parabús/Columna/Gran Formato) = buckets sobre el mueble (e.muebles). Substring: "PARABUS" ∈ "RENTA DE ESPACIOS PARABUS".
+    if (muebleSel.length && !(e.muebles ?? []).some((m) => muebleSel.some((k) => m.toUpperCase().includes(k)))) return false;
     if (clientesSel.length && !(e.cliente && clientesSel.includes(e.cliente))) return false;
     if (campaniasSel.length && !(e.campania && campaniasSel.includes(e.campania))) return false;
     if (marcasSel.length && !(e.marca && marcasSel.includes(e.marca))) return false;
@@ -1042,7 +1083,7 @@ export function VariacionesPage() {
     : granularidad === 'catorcena' ? catsSel.map((c) => `Cat ${c}`)
     : granularidad === 'semana' ? semsSel.map((w) => `Sem ${w}`) : [];
   const chipsActivos = [
-    ...periodoLabels, ...plazasSel, ...formatosSel, ...mueblesSel, ...asesoresSel,
+    ...periodoLabels, ...plazasSel, ...digitalSel, ...muebleSel, ...asesoresSel,
     ...clientesSel, ...campaniasSel, ...marcasSel, ...statusSel, ...basesSel, idq ? `ID ${idq}` : '',
     campoFiltro !== 'todos' ? campoFiltro : '', direccion !== 'todas' ? direccion : '',
     apsFiltro !== 'todos' ? `APS: ${apsFiltro}` : '', !tiposArt.includes('IM') ? 'sin impresiones' : '',
@@ -1075,14 +1116,11 @@ export function VariacionesPage() {
             <MultiSelect label="Semana" opciones={semanasDisp.map((w) => [w, `Sem ${w}`] as [number, string])} sel={semsSel} onChange={setSemsSel} />
           )}
           <MultiSelectStr label="Plaza" opciones={opciones.plazas} sel={plazasSel} onChange={setPlazasSel} />
-          <MultiSelectStr label="Formato" opciones={opciones.formatos} sel={formatosSel} onChange={setFormatosSel} />
-          <MultiSelectStr label="Tipo de mueble" opciones={opciones.muebles} sel={mueblesSel} onChange={setMueblesSel} />
           <MultiSelectStr label="Asesor" opciones={opciones.asesores} sel={asesoresSel} onChange={setAsesoresSel} />
           <MultiSelectStr label="Cliente" opciones={opciones.clientes} sel={clientesSel} onChange={setClientesSel} />
           <MultiSelectStr label="Campaña" opciones={opciones.campanias} sel={campaniasSel} onChange={setCampaniasSel} />
           <MultiSelectStr label="Marca" opciones={opciones.marcas} sel={marcasSel} onChange={setMarcasSel} />
           <MultiSelectStr label="Estatus" opciones={opciones.status} sel={statusSel} onChange={setStatusSel} />
-          <MultiSelectStr label="Base" opciones={opciones.bases} sel={basesSel} onChange={setBasesSel} />
           <label className="flex w-full items-center gap-1.5 text-xs sm:w-auto">
             <span className="w-24 shrink-0 whitespace-nowrap text-zinc-500 dark:text-zinc-400 sm:w-auto">ID campaña</span>
             <input value={idCampania} onChange={(e) => setIdCampania(e.target.value)} inputMode="numeric" placeholder="Ej. 81220"
@@ -1092,6 +1130,7 @@ export function VariacionesPage() {
             Limpiar
           </button>
         </div>
+        <FiltrosCategoria bases={basesSel} tipos={tiposArt} muebles={muebleSel} digital={digitalSel} onToggle={toggleCat} />
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-zinc-500 dark:text-zinc-400">Movimiento</span>
@@ -1102,19 +1141,12 @@ export function VariacionesPage() {
             <FiltroGrupo opciones={[['todas', 'Todas'], ['alzas', 'Alzas'], ['bajas', 'Bajas']]} valor={direccion} onSel={(v) => setDireccion(v as typeof direccion)} />
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">Tipo artículo</span>
-            {([['RT', 'Renta'], ['BF', 'Bonif.'], ['IN', 'Intercambio'], ['IM', 'Impresión']] as [string, string][]).map(([v, l]) => (
-              <button key={v} type="button" onClick={() => setTiposArt((p) => (p.includes(v) ? p.filter((x) => x !== v) : [...p, v]))}
-                className={cn('rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors', tiposArt.includes(v) ? 'bg-purple-500/20 text-purple-700 dark:text-purple-200' : 'bg-zinc-500/10 text-zinc-400')}>{l}</button>
-            ))}
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-zinc-500 dark:text-zinc-400">APS</span>
             <FiltroGrupo opciones={[['todos', 'Todos'], ['con', 'Con APS'], ['sin', 'Sin APS']]} valor={apsFiltro} onSel={(v) => setApsFiltro(v as typeof apsFiltro)} />
           </div>
         </div>
         <p className="text-[11px] text-zinc-400">
-          Plaza · Formato · Tipo de mueble corresponden a las caras exactas que se editaron en cada registro (por circuito/cara del historial).
+          Plaza · Formato · Tradicional/Digital corresponden a las caras exactas que se editaron en cada registro (por circuito/cara del historial). Gran Formato = Mi Macro.
           {!tiposArt.includes('IM') && <span className="ml-1 font-medium text-amber-600 dark:text-amber-400">· No incluye impresiones (activa "Impresión" para verlas).</span>}
         </p>
       </BarraFiltros>
