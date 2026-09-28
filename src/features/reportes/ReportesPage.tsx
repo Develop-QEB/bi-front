@@ -147,13 +147,13 @@ export function EmbudoPage() {
 
   // Barra de filtros compartida (afecta toda la tab).
   const [granularidad, setGranularidad] = useState<'mes' | 'anio'>('mes');
-  const [filtros, setFiltros] = useState<FiltrosReporte>({ anio: ANIO, mes: null, plaza: null, formato: null, mueble: null, cliente: null, asesor: null, bases: ['CIMU', 'TRADE'], tipos: ['RT', 'BF', 'IN'], muebles: [], digital: [] });
+  const [filtros, setFiltros] = useState<FiltrosReporte>({ anio: ANIO, mes: null, plaza: null, formato: null, mueble: null, cliente: null, asesor: null, bases: ['CIMU', 'TRADE'], tipos: ['RT', 'BF', 'IN'], muebles: ['PARABUS', 'COLUMNA'], digital: ['Tradicional', 'Digital'] });
   const [opciones, setOpciones] = useState<OpcionesReporte>({ plaza: [], formato: [], mueble: [], cliente: [], asesor: [] });
   const setF = (k: keyof FiltrosReporte, v: string | number | null) =>
     setFiltros((f) => ({ ...f, [k]: v === '' ? null : v }));
   const toggleF = (k: CatKey, v: string) =>
     setFiltros((f) => { const cur = (f[k] ?? []) as string[]; return { ...f, [k]: cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v] }; });
-  const limpiar = () => { setGranularidad('mes'); setFiltros((f) => ({ anio: f.anio, mes: null, plaza: null, formato: null, mueble: null, cliente: null, asesor: null, bases: ['CIMU', 'TRADE'], tipos: ['RT', 'BF', 'IN'], muebles: [], digital: [] })); };
+  const limpiar = () => { setGranularidad('mes'); setFiltros((f) => ({ anio: f.anio, mes: null, plaza: null, formato: null, mueble: null, cliente: null, asesor: null, bases: ['CIMU', 'TRADE'], tipos: ['RT', 'BF', 'IN'], muebles: ['PARABUS', 'COLUMNA'], digital: ['Tradicional', 'Digital'] })); };
 
   const [tick, setTick] = useState(0); // re-carga en vivo con el WS
   const estadoWS = useLiveRefresh(() => setTick((t) => t + 1));
@@ -665,7 +665,7 @@ function BarraFiltros({ children, resumen }: { children: ReactNode; resumen?: Re
   const [abierto, setAbierto] = useState(false);
   useCloseOnRotate(abierto, () => setAbierto(false));
   return (
-    <div className={cn(CARD, '!p-3', !compacto && 'sticky z-20 top-[calc(var(--bi-header-h,104px)_+_8px)]')}>
+    <div className={cn(CARD, '!p-3', compacto ? 'relative z-20' : 'sticky z-20 top-[calc(var(--bi-header-h,104px)_+_8px)]')}>
       {compacto && (
         <button
           onClick={() => setAbierto((v) => !v)}
@@ -721,8 +721,8 @@ export function VariacionesPage() {
   const [catsSel, setCatsSel] = useState<number[]>([]);   // catorcenas
   const [catCal, setCatCal] = useState<CatorcenaCal[]>([]); // calendario de catorcenas del año
   const [plazasSel, setPlazasSel] = useState<string[]>([]);       // multi + búsqueda
-  const [digitalSel, setDigitalSel] = useState<string[]>([]);   // multi + búsqueda
-  const [muebleSel, setMuebleSel] = useState<string[]>([]);     // multi + búsqueda
+  const [digitalSel, setDigitalSel] = useState<string[]>(['Tradicional', 'Digital']); // default Trad+Digital (igual que BI)
+  const [muebleSel, setMuebleSel] = useState<string[]>(['PARABUS', 'COLUMNA']);       // default Parabús+Columna (igual que BI)
   const [asesoresSel, setAsesoresSel] = useState<string[]>([]);   // multi + búsqueda
   const [clientesSel, setClientesSel] = useState<string[]>([]);   // multi + búsqueda
   const [campaniasSel, setCampaniasSel] = useState<string[]>([]); // multi + búsqueda
@@ -829,7 +829,7 @@ export function VariacionesPage() {
   const catorcenasDisp = [...new Set(imp.ediciones.map((e) => catDe(e.fecha)).filter((c) => c > 0))].sort((a, b) => a - b);
 
   const limpiar = () => {
-    setGranularidad('mes'); setMesesSel([]); setSemsSel([]); setCatsSel([]); setPlazasSel([]); setDigitalSel([]); setMuebleSel([]);
+    setGranularidad('mes'); setMesesSel([]); setSemsSel([]); setCatsSel([]); setPlazasSel([]); setDigitalSel(['Tradicional', 'Digital']); setMuebleSel(['PARABUS', 'COLUMNA']);
     setClientesSel([]); setCampaniasSel([]); setMarcasSel([]); setStatusSel([]); setIdCampania(''); setAsesoresSel([]); setCampoFiltro('todos'); setDireccion('todas');
     setBasesSel(['CIMU', 'TRADE']); setTiposArt(['RT', 'BF', 'IN']); setApsFiltro('todos');
   };

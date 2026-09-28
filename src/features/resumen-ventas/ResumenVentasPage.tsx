@@ -19,7 +19,7 @@ import type { FiltrosResumen, ResumenVentas } from '../../types/bi';
 const FILTROS_INICIALES: FiltrosResumen = {
   base: null,
   bases: ['CIMU', 'Trade'],
-  tipos: [],
+  tipos: ['RT', 'BF', 'IN'], // Renta+Bonif.+Intercambio (sin Impresión ni Cortesía) — igual que Variaciones/Embudo
   muebles: ['PARABUS', 'COLUMNA'],
   digital: ['Tradicional', 'Digital'],
   asesor: null,
