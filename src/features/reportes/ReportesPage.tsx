@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { BarChart3, ChevronDown, SlidersHorizontal } from 'lucide-react';
+import { BarChart3, CalendarClock, ChevronDown, Layers, SlidersHorizontal, Tag } from 'lucide-react';
 import {
   Area, Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Legend, Line, Pie, PieChart,
   ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -602,16 +602,17 @@ function MultiSelectStr({ label, opciones, sel, onChange }: { label: string; opc
   );
 }
 
-// Contenedor de la barra de filtros: pegado (sticky) al hacer scroll en todos los
-// tamaños; colapsable en móvil (muestra un resumen de filtros activos).
+// Contenedor de la barra de filtros. En escritorio (lg+) queda pegado (sticky) al
+// hacer scroll; en móvil Y TABLET (iPad) es un panel colapsable que fluye con la
+// página (no se queda pegado tapando/empujando el contenido al hacer scroll).
 function BarraFiltros({ children, resumen }: { children: ReactNode; resumen?: ReactNode }) {
   const [abierto, setAbierto] = useState(false);
   useCloseOnRotate(abierto, () => setAbierto(false));
   return (
-    <div className={cn(CARD, '!p-3', 'sticky z-20 top-[calc(var(--bi-header-h,104px)_+_8px)]')}>
+    <div className={cn(CARD, '!p-3', 'lg:sticky lg:z-20 lg:top-[calc(var(--bi-header-h,104px)_+_8px)]')}>
       <button
         onClick={() => setAbierto((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 text-xs font-medium text-purple-700 dark:text-purple-200 sm:hidden"
+        className="flex w-full items-center justify-between gap-2 text-xs font-medium text-purple-700 dark:text-purple-200 lg:hidden"
       >
         <span className="flex items-center gap-1.5"><SlidersHorizontal className="h-4 w-4" /> Filtros</span>
         <span className="flex min-w-0 items-center gap-2">
@@ -619,7 +620,7 @@ function BarraFiltros({ children, resumen }: { children: ReactNode; resumen?: Re
           <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', abierto && 'rotate-180')} />
         </span>
       </button>
-      <div className={cn('space-y-3', abierto ? 'mt-3 sm:mt-0' : 'hidden sm:block')}>
+      <div className={cn('space-y-3', abierto ? 'mt-3 lg:mt-0' : 'hidden lg:block')}>
         {children}
       </div>
     </div>
@@ -1126,7 +1127,7 @@ export function VariacionesPage() {
                 const campos: { label: string; tono: string }[] = [];
                 if (e.cambioCaras) campos.push({ label: unidadCant, tono: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300' });
                 if (e.cambioTarifa) campos.push({ label: 'Tarifa', tono: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' });
-                if (esPeriodo) campos.push({ label: 'Periodo', tono: 'bg-sky-500/15 text-sky-700 dark:text-sky-300' });
+                if (esPeriodo) campos.push({ label: 'Periodo', tono: 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300' });
                 if (esElim) campos.push({ label: 'Eliminación', tono: 'bg-rose-500/15 text-rose-700 dark:text-rose-300' });
                 const art = (e.articulos ?? []).join(', ');
                 const plaza = (e.plazas ?? []).join(', ');
@@ -1163,13 +1164,13 @@ export function VariacionesPage() {
                         <div className="flex flex-col gap-0.5">
                           {e.cambioCaras && e.carasAntes != null && (
                             <span className="text-zinc-600 dark:text-zinc-300">
-                              <span className="mr-1 text-[10px] uppercase text-zinc-400">Caras</span>{e.carasAntes} <span className="text-zinc-400">→</span> {e.carasDespues}
+                              <span className="mr-1 inline-flex items-center gap-0.5 text-[10px] font-semibold uppercase text-cyan-600 dark:text-cyan-400"><Layers className="h-3 w-3" />Caras</span>{e.carasAntes} <span className="text-zinc-400">→</span> {e.carasDespues}
                               <span className={cn('ml-1', e.caras > 0 ? 'text-emerald-600 dark:text-emerald-400' : e.caras < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-400')}>({e.caras > 0 ? '+' : ''}{e.caras})</span>
                             </span>
                           )}
                           {e.cambioTarifa && e.tarifaAntes != null && (
                             <span className="text-zinc-600 dark:text-zinc-300">
-                              <span className="mr-1 text-[10px] uppercase text-zinc-400">Tarifa</span>{formatCurrency(e.tarifaAntes)} <span className="text-zinc-400">→</span> {formatCurrency(e.tarifaDespues ?? 0)}
+                              <span className="mr-1 inline-flex items-center gap-0.5 text-[10px] font-semibold uppercase text-amber-600 dark:text-amber-400"><Tag className="h-3 w-3" />Tarifa</span>{formatCurrency(e.tarifaAntes)} <span className="text-zinc-400">→</span> {formatCurrency(e.tarifaDespues ?? 0)}
                             </span>
                           )}
                         </div>
@@ -1181,7 +1182,8 @@ export function VariacionesPage() {
                       ) : esPeriodo ? (
                         (e.periodoAntes || e.periodoDespues) ? (
                           <span className="text-zinc-600 dark:text-zinc-300 whitespace-nowrap">
-                            <span className="mr-1 text-[10px] uppercase text-zinc-400">Periodo</span>{e.periodoAntes ?? '—'} <span className="text-zinc-400">→</span> {e.periodoDespues ?? '—'}
+                            <span className="mr-1 inline-flex items-center gap-0.5 text-[10px] font-semibold uppercase text-indigo-600 dark:text-indigo-400"><CalendarClock className="h-3 w-3" />Periodo</span>{e.periodoAntes ?? '—'} <span className="text-zinc-400">→</span> {e.periodoDespues ?? '—'}
+                            {e.periodoAntes && e.periodoAntes === e.periodoDespues && <span className="ml-1 text-[10px] italic text-zinc-400">(mismas fechas)</span>}
                           </span>
                         ) : <span className="text-zinc-400" title="Este registro es anterior a que QEB empezara a guardar el periodo antes/después">modificado</span>
                       ) : <span className="text-zinc-400">—</span>}
