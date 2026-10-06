@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { BarChart3, CalendarClock, ChevronDown, Layers, SlidersHorizontal, Tag } from 'lucide-react';
 import {
-  Area, Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Legend, Line, Pie, PieChart,
+  Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Legend, Line, Pie, PieChart,
   ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { Spinner } from '../../components/ui/spinner';
@@ -740,7 +740,6 @@ export function VariacionesPage() {
   const ink = chartInk(isDark);
 
   const [ventaTotal, setVentaTotal] = useState<number | null>(null);
-  const [ventaAnio, setVentaAnio] = useState<number | null>(null); // venta V_APS del AÑO completo (ancla absoluta, ignora filtro de periodo)
   const [ventaPrev, setVentaPrev] = useState<number | null>(null); // período inmediato anterior (para ▲/▼)
   const [ventasPeriodo, setVentasPeriodo] = useState<Record<number, number>>({}); // venta V_APS por período (línea del chart)
   const [tick, setTick] = useState(0); // se incrementa con cada evento del WS → re-carga en vivo
@@ -768,9 +767,6 @@ export function VariacionesPage() {
       : granularidad === 'semana' ? { semanas: semsSel }
       : {};
     getVentaTotal({ ...base, ...per }).then(setVentaTotal).catch(() => setVentaTotal(null));
-    // Ancla ABSOLUTA: venta del AÑO completo (mismos filtros salvo el periodo) — para
-    // que "valor al inicio" no cambie al filtrar un mes (responde siempre al mismo acumulado).
-    getVentaTotal(base).then(setVentaAnio).catch(() => setVentaAnio(null));
 
     // Período previo: único valor seleccionado y > 1.
     const uno = granularidad === 'mes' && mesesSel.length === 1 ? { key: 'meses' as const, v: mesesSel[0] }
@@ -879,7 +875,6 @@ export function VariacionesPage() {
     if (granularidad === 'catorcena' && catsSel.length && !catsSel.includes(catDe(e.fecha))) return false;
     return true;
   };
-  const periodoActivo = (granularidad === 'mes' && mesesSel.length > 0) || (granularidad === 'semana' && semsSel.length > 0) || (granularidad === 'catorcena' && catsSel.length > 0);
   const filAnio = imp.ediciones.filter(pasaBase);
   const fil = filAnio.filter(enPeriodo);
 
@@ -966,68 +961,6 @@ export function VariacionesPage() {
   }
   const maxAporte = Math.max(Math.abs(aporteCaras), Math.abs(aporteTarifa), 1);
 
-  // Cómo se movió la inversión (cascada): base → +Δcaras → +Δtarifa → actual.
-  // Base SIN doble conteo: cada campaña cuenta 1 vez con su PRIMER "antes"
-  // (una campaña editada N veces no suma su base N veces).
-  const primerAntesPorCamp = new Map<string | number, { fecha: number; inv: number }>();
-  for (const e of fil) {
-    if (e.invAntes == null) continue;
-    const k = e.campania ?? e.refId ?? e.id;
-    const t = new Date(e.fecha).getTime();
-    const prev = primerAntesPorCamp.get(k);
-    if (!prev || t < prev.fecha) primerAntesPorCamp.set(k, { fecha: t, inv: e.invAntes });
-  }
-  const invBase = [...primerAntesPorCamp.values()].reduce((a, x) => a + x.inv, 0);
-  const invActual = invBase + aporteCaras + aporteTarifa;
-
-  // --- Reconstrucción del acumulado con BASELINE ABSOLUTO (año completo) ---
-  // El "valor al inicio" = venta del AÑO − variación de TODO el año (no del subconjunto
-  // filtrado), así NO cambia al filtrar un mes: responde siempre al mismo acumulado.
-  // Los puntos por período son acumulativos desde el día 1 del año.
-  const dAnio = filAnio.reduce((a, e) => a + (e.monto ?? 0), 0);
-  const anchorAnio = ventaAnio != null ? ventaAnio : (ventaTotal ?? invActual);
-  const valorInicio = anchorAnio - dAnio;
-  const pctInicio = (v: number) => (valorInicio ? (v / valorInicio) * 100 : 0);
-
-  const deltaAnioBucket = new Map<number, number>();
-  for (const e of filAnio) {
-    const b = bucketDe(e);
-    if (!Number.isFinite(b) || b <= 0) continue;
-    deltaAnioBucket.set(b, (deltaAnioBucket.get(b) ?? 0) + (e.monto ?? 0));
-  }
-  const bucketsConDatos = [...deltaAnioBucket.keys()].filter((b) => b > 0).sort((a, b) => a - b);
-  const maxBucket = bucketsConDatos.length ? Math.max(...bucketsConDatos) : 0;
-  // Acumulado CONTINUO desde el bucket 1 hasta el último con datos (rellena huecos:
-  // los períodos sin ediciones conservan el acumulado previo → salen planos).
-  const cumBucket = new Map<number, number>();
-  let accAnio = valorInicio;
-  for (let b = 1; b <= maxBucket; b++) { accAnio += deltaAnioBucket.get(b) ?? 0; cumBucket.set(b, accAnio); }
-  // Buckets a mostrar: con filtro de período, solo esos; si no, TODO el rango continuo
-  // 1..máximo (para que se vean todos los meses, aunque no tengan ediciones).
-  const bucketsFil = new Set(fil.map((e) => bucketDe(e)).filter((b) => Number.isFinite(b) && b > 0));
-  const bucketsVista = periodoActivo
-    ? bucketsConDatos.filter((b) => bucketsFil.has(b))
-    : (maxBucket ? Array.from({ length: maxBucket }, (_, i) => i + 1) : bucketsConDatos);
-  const trayectoria: { etiqueta: string; total: number; delta: number; pct: number | null }[] = [
-    { etiqueta: 'Inicio', total: valorInicio, delta: 0, pct: null },
-  ];
-  for (const b of bucketsVista) {
-    const d = deltaAnioBucket.get(b) ?? 0;
-    const totalB = cumBucket.get(b) ?? valorInicio;
-    const prev = totalB - d;
-    trayectoria.push({ etiqueta: etiquetaBucket(b), total: totalB, delta: d, pct: prev ? (d / prev) * 100 : null });
-  }
-  // "Venta acumulada" del último punto mostrado (fin del período filtrado, o total del año).
-  const anchorTotal = trayectoria.length > 1 ? trayectoria[trayectoria.length - 1].total : (ventaAnio ?? valorInicio);
-  const D = anchorTotal - valorInicio; // cuánto se movió del inicio del año al último punto mostrado
-  // Fecha base = DÍA 1 DEL AÑO (el "valor al inicio" es el acumulado al inicio del año,
-  // antes de cualquier edición; no es la fecha de la primera edición).
-  const fechaBaseIni = `${anio}-01-01T00:00:00`;
-  const tvals = trayectoria.map((t) => t.total);
-  const tmin = tvals.length ? Math.min(...tvals) : 0;
-  const tmax = tvals.length ? Math.max(...tvals) : 1;
-  const tpad = Math.max((tmax - tmin) * 0.3, Math.abs(anchorTotal) * 0.005, 1);
-  const domY: [number, number] = [tmin - tpad, tmax + tpad];
 
   // Variación neta por asesor (una barra por asesor, verde/rojo según signo).
   const porAsesor = new Map<string, number>();
@@ -1457,49 +1390,6 @@ export function VariacionesPage() {
       </div>
       )}
 
-      {/* Cómo se movió la venta acumulada */}
-      <div className={CARD}>
-        <CardTitle>Cómo se movió la venta acumulada por {unidad}</CardTitle>
-        <p className="-mt-1 mb-3 text-[11px] text-zinc-400">
-          Valor acumulado del <b>año</b> reconstruido: parte del acumulado al inicio (día 1) y aplica las variaciones
-          (alzas/bajas) período a período. El <b>valor al inicio es siempre el del año completo</b> — no cambia al filtrar un período.
-        </p>
-        <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <MetricCard titulo="Valor al inicio (año)" valor={formatCurrency(valorInicio)} sub={fechaBaseIni ? `desde ${fmtFecha(fechaBaseIni)}` : `Inicio ${anio}`} tono="neutral" accent={ACCENTS[0]} />
-          <MetricCard titulo="Δ por caras" valor={`${aporteCaras >= 0 ? '+' : ''}${formatCurrency(aporteCaras)}`} sub={`${pctInicio(aporteCaras).toFixed(1)}% del valor inicial`} tono={aporteCaras >= 0 ? 'up' : 'down'} accent={ACCENTS[1]} />
-          <MetricCard titulo="Δ por tarifa" valor={`${aporteTarifa >= 0 ? '+' : ''}${formatCurrency(aporteTarifa)}`} sub={`${pctInicio(aporteTarifa).toFixed(1)}% del valor inicial`} tono={aporteTarifa >= 0 ? 'up' : 'down'} accent={ACCENTS[2]} />
-          <MetricCard titulo={periodoActivo ? 'Venta acum. (fin período)' : 'Venta acumulada hoy'} valor={formatCurrency(anchorTotal)} sub={`${pctInicio(D) >= 0 ? '▲ +' : '▼ '}${pctInicio(D).toFixed(1)}% vs inicio`} tono={D >= 0 ? 'up' : 'down'} accent={ACCENTS[3]} />
-        </div>
-        <ResponsiveContainer width="100%" height={280}>
-          <ComposedChart data={trayectoria} margin={{ top: 12, right: 12, left: 0, bottom: 4 }}>
-            <defs>
-              <linearGradient id="gradTray" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid stroke={ink.grid} vertical={false} />
-            <XAxis dataKey="etiqueta" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
-            <YAxis domain={domY} tickFormatter={fmtM} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
-            <Tooltip content={
-              <TooltipChart
-                format={(v, _n, p) => {
-                  const d = p && typeof p.delta === 'number' ? (p.delta as number) : 0;
-                  const pct = p && typeof p.pct === 'number' ? (p.pct as number) : null;
-                  if (d === 0) return formatCurrency(v);
-                  const flecha = d > 0 ? '▲ +' : '▼ ';
-                  const pctTxt = pct != null ? ` · ${flecha}${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%` : ` · ${d > 0 ? '+' : ''}`;
-                  return `${formatCurrency(v)} (${d > 0 ? '+' : ''}${formatCurrency(d)}${pctTxt})`;
-                }}
-              />
-            } />
-            <Area type="monotone" dataKey="total" name="Venta acumulada" stroke="#8b5cf6" strokeWidth={2.5} fill="url(#gradTray)" dot={{ r: 3, fill: '#8b5cf6' }} activeDot={{ r: 5 }} />
-          </ComposedChart>
-        </ResponsiveContainer>
-        <p className="mt-1 text-[11px] text-zinc-400">
-          Valor acumulado por {unidad}: baja los períodos con más bajas y sube los que tienen más alzas, hasta el valor de hoy. Pasa el mouse por cada punto para ver el cambio ($ y %).
-        </p>
-      </div>
     </div>
   );
 }
