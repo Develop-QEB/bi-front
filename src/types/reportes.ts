@@ -38,6 +38,19 @@ export interface FiltrosReporte {
   tipos?: string[];
   muebles?: string[]; // Formato: PARABUS/COLUMNA/MACRO (Gran Formato)
   digital?: string[]; // Tradicional/Digital
+  plazas?: string[];   // multi-selección de plaza
+  clientes?: string[]; // multi-selección de cliente
+  asesores?: string[]; // multi-selección de asesor
+}
+
+/** Tendencia del ciclo de vida por mes (días promedio por etapa, del historial). */
+export interface CicloTendenciaMes {
+  mes: number;
+  solProp: number | null;   // días creación → "Atendido"
+  propAprob: number | null; // días "Atendido" → aprobación
+  total: number | null;     // días creación → aprobación
+  n: number;
+  nAprob: number;
 }
 
 export interface OpcionesReporte {

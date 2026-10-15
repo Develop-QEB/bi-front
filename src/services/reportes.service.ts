@@ -1,5 +1,5 @@
 import { authFetch } from '../lib/api';
-import type { CampaniaDetalle, Ciclo, ConteoMonto, ConteoPeriodo, Dimension, Embudo, FiltrosReporte, OpcionesReporte, Periodo } from '../types/reportes';
+import type { CampaniaDetalle, Ciclo, CicloTendenciaMes, ConteoMonto, ConteoPeriodo, Dimension, Embudo, FiltrosReporte, OpcionesReporte, Periodo } from '../types/reportes';
 
 async function getJSON<T>(path: string): Promise<T> {
   const res = await authFetch(path);
@@ -24,6 +24,9 @@ function qsFiltros(f: Partial<FiltrosReporte>): string {
   if (f.tipos?.length) p.set('tipos', f.tipos.join(','));
   if (f.muebles?.length) p.set('muebles', f.muebles.join(','));
   if (f.digital?.length) p.set('digital', f.digital.join(','));
+  if (f.plazas?.length) p.set('plazas', f.plazas.join(','));
+  if (f.clientes?.length) p.set('clientes', f.clientes.join(','));
+  if (f.asesores?.length) p.set('asesores', f.asesores.join(','));
   return p.toString();
 }
 
@@ -45,6 +48,9 @@ export function getVentasPeriodo(periodo: Periodo, f: Partial<FiltrosReporte> = 
 }
 
 export const getCiclo = (f: Partial<FiltrosReporte> = { anio: ANIO_DEF }) => getJSON<Ciclo>(`/reportes/ciclo?${qsFiltros(f)}`);
+/** Tendencia del ciclo de vida por mes (días por etapa). */
+export const getCicloTendencia = (f: Partial<FiltrosReporte> = { anio: ANIO_DEF }) =>
+  getJSON<CicloTendenciaMes[]>(`/reportes/ciclo-tendencia?${qsFiltros(f)}`);
 export const getCampanias = (limit = 120, f: Partial<FiltrosReporte> = { anio: ANIO_DEF }) =>
   getJSON<CampaniaDetalle[]>(`/reportes/campanias?limit=${limit}&${qsFiltros(f)}`);
 

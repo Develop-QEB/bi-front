@@ -17,11 +17,11 @@ import { chartInk } from '../../lib/chartTheme';
 import { useThemeStore } from '../../store/themeStore';
 import { getAsesores, getResumenVentas } from '../../services/resumenVentas.service';
 import { getImpacto } from '../../services/historial.service';
-import { getCampanias, getCatorcenas, getCiclo, getDistribucion, getEmbudo, getOpciones, getTarifas, getVentasPeriodo, getVentaTotal } from '../../services/reportes.service';
+import { getCampanias, getCatorcenas, getCiclo, getCicloTendencia, getDistribucion, getEmbudo, getOpciones, getTarifas, getVentasPeriodo, getVentaTotal } from '../../services/reportes.service';
 import type { CatorcenaCal, Tarifas } from '../../services/reportes.service';
 import { asesorObjetivoDe, objetivoAnual, objetivoDe, useObjetivosStore } from '../../store/objetivosStore';
 import type { ResumenVentas } from '../../types/bi';
-import type { CampaniaDetalle, Ciclo, ConteoMonto, Embudo, EtapaEmbudo, FiltrosReporte, Impacto, OpcionesReporte, Periodo } from '../../types/reportes';
+import type { CampaniaDetalle, Ciclo, CicloTendenciaMes, ConteoMonto, Embudo, EtapaEmbudo, FiltrosReporte, Impacto, OpcionesReporte, Periodo } from '../../types/reportes';
 
 const ANIO = 2026;
 
@@ -147,13 +147,15 @@ export function EmbudoPage() {
 
   // Barra de filtros compartida (afecta toda la tab).
   const [granularidad, setGranularidad] = useState<'mes' | 'anio'>('mes');
-  const [filtros, setFiltros] = useState<FiltrosReporte>({ anio: ANIO, mes: null, plaza: null, formato: null, mueble: null, cliente: null, asesor: null, bases: ['CIMU', 'TRADE'], tipos: ['RT', 'BF', 'IN'], muebles: ['PARABUS', 'COLUMNA'], digital: ['Tradicional', 'Digital'] });
+  const [filtros, setFiltros] = useState<FiltrosReporte>({ anio: ANIO, mes: null, formato: null, mueble: null, plazas: [], clientes: [], asesores: [], bases: ['CIMU', 'TRADE'], tipos: ['RT', 'BF', 'IN'], muebles: ['PARABUS', 'COLUMNA'], digital: ['Tradicional', 'Digital'] });
   const [opciones, setOpciones] = useState<OpcionesReporte>({ plaza: [], formato: [], mueble: [], cliente: [], asesor: [] });
+  const [tendencia, setTendencia] = useState<CicloTendenciaMes[]>([]);
   const setF = (k: keyof FiltrosReporte, v: string | number | null) =>
     setFiltros((f) => ({ ...f, [k]: v === '' ? null : v }));
+  const setArr = (k: 'plazas' | 'clientes' | 'asesores', arr: string[]) => setFiltros((f) => ({ ...f, [k]: arr }));
   const toggleF = (k: CatKey, v: string) =>
     setFiltros((f) => { const cur = (f[k] ?? []) as string[]; return { ...f, [k]: cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v] }; });
-  const limpiar = () => { setGranularidad('mes'); setFiltros((f) => ({ anio: f.anio, mes: null, plaza: null, formato: null, mueble: null, cliente: null, asesor: null, bases: ['CIMU', 'TRADE'], tipos: ['RT', 'BF', 'IN'], muebles: ['PARABUS', 'COLUMNA'], digital: ['Tradicional', 'Digital'] })); };
+  const limpiar = () => { setGranularidad('mes'); setFiltros((f) => ({ anio: f.anio, mes: null, formato: null, mueble: null, plazas: [], clientes: [], asesores: [], bases: ['CIMU', 'TRADE'], tipos: ['RT', 'BF', 'IN'], muebles: ['PARABUS', 'COLUMNA'], digital: ['Tradicional', 'Digital'] })); };
 
   const [tick, setTick] = useState(0); // re-carga en vivo con el WS
   const estadoWS = useLiveRefresh(() => setTick((t) => t + 1));
@@ -168,6 +170,7 @@ export function EmbudoPage() {
     Promise.all([
       getEmbudo(f).then(setEmb),
       getCiclo(f).then(setCiclo).catch(() => {}),
+      getCicloTendencia(f).then(setTendencia).catch(() => setTendencia([])),
       getCampanias(120, f).then(setCamps).catch(() => setCamps([])),
       getDistribucion('plaza', f).then(setPlaza).catch(() => {}),
       getDistribucion('digital', f).then(setDigital).catch(() => {}),
@@ -214,7 +217,7 @@ export function EmbudoPage() {
   const topCli = cliente.slice(0, 8);
 
   const chipsEmbudo = [
-    filtros.mes ? MESES[filtros.mes - 1] : '', filtros.plaza ?? '', filtros.formato ?? '', filtros.mueble ?? '', filtros.cliente ?? '', filtros.asesor ?? '',
+    filtros.mes ? MESES[filtros.mes - 1] : '', ...(filtros.plazas ?? []), ...(filtros.clientes ?? []), ...(filtros.asesores ?? []),
   ].filter(Boolean) as string[];
   const resumenEmbudo = chipsEmbudo.length
     ? chipsEmbudo.slice(0, 2).join(', ') + (chipsEmbudo.length > 2 ? ` +${chipsEmbudo.length - 2}` : '')
@@ -231,9 +234,9 @@ export function EmbudoPage() {
           {granularidad === 'mes' && (
             <SelectBox label="Mes" valor={String(filtros.mes ?? 0)} opciones={[['0', 'Todos'], ...MESES.map((m, i) => [String(i + 1), m] as [string, string])]} onSel={(v) => setF('mes', Number(v) || null)} />
           )}
-          <SelectBox label="Plaza" valor={filtros.plaza ?? ''} opciones={conTodos(opciones.plaza)} onSel={(v) => setF('plaza', v)} />
-          <SelectBox label="Cliente" valor={filtros.cliente ?? ''} opciones={conTodos(opciones.cliente)} onSel={(v) => setF('cliente', v)} />
-          <SelectBox label="Asesor" valor={filtros.asesor ?? ''} opciones={conTodos(opciones.asesor)} onSel={(v) => setF('asesor', v)} />
+          <MultiSelectStr label="Plaza" opciones={opciones.plaza} sel={filtros.plazas ?? []} onChange={(v) => setArr('plazas', v)} />
+          <MultiSelectStr label="Cliente" opciones={opciones.cliente} sel={filtros.clientes ?? []} onChange={(v) => setArr('clientes', v)} />
+          <MultiSelectStr label="Asesor" opciones={opciones.asesor} sel={filtros.asesores ?? []} onChange={(v) => setArr('asesores', v)} />
           <button onClick={limpiar} className="rounded-lg border border-purple-200/60 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-500/10 dark:border-purple-900/40 dark:text-purple-200">
             Limpiar
           </button>
@@ -283,14 +286,35 @@ export function EmbudoPage() {
         )}
       </div>
 
-      {/* Tarifas promedio (efectiva vs pública) */}
+      {/* Tendencia del ciclo de vida: días por etapa, por mes (del historial de estatus) */}
       <div className={CARD}>
-        <CardTitle>Tarifas promedio</CardTitle>
+        <CardTitle>Tendencia del ciclo de vida</CardTitle>
+        <p className="-mt-1 mb-2 text-[11px] text-zinc-400">
+          Días promedio por mes de creación · <span className="text-purple-500 dark:text-purple-300">Solicitud → Propuesta</span> (hasta &quot;Atendido&quot;) y <span className="text-emerald-500 dark:text-emerald-300">Propuesta → Aprobación</span> — leído de los cambios de estatus del historial.
+        </p>
+        {tendencia.some((t) => t.n > 0) ? (
+          <ResponsiveContainer width="100%" height={280}>
+            <ComposedChart data={tendencia.filter((t) => t.n > 0).map((t) => ({ etiqueta: MESES[t.mes - 1], solProp: t.solProp, propAprob: t.propAprob, n: t.n }))} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke={ink.grid} vertical={false} />
+              <XAxis dataKey="etiqueta" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
+              <YAxis tickFormatter={(v) => `${v}d`} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={40} />
+              <Tooltip content={<TooltipChart format={(v) => `${Math.round(v * 10) / 10} días`} />} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Line type="monotone" dataKey="solProp" name="Solicitud → Propuesta" stroke="#8b5cf6" strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
+              <Line type="monotone" dataKey="propAprob" name="Propuesta → Aprobación" stroke="#22c55e" strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
+            </ComposedChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="py-10 text-center text-xs text-zinc-400">Sin datos de ciclo para el alcance filtrado.</p>
+        )}
+      </div>
+
+      {/* Tarifa promedio (QEB guarda UNA sola tarifa por cara: lista = cobrado, sin descuento) */}
+      <div className={CARD}>
+        <CardTitle>Tarifa promedio</CardTitle>
         <p className="-mt-1 mb-3 text-[11px] text-zinc-400">Promedio por cara según el alcance filtrado</p>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <MetricCard titulo="Tarifa pública prom." valor={tarifas ? formatCurrency(tarifas.publica) : '…'} sub="Precio de lista por cara" tono="neutral" accent={ACCENTS[0]} />
-          <MetricCard titulo="Tarifa efectiva prom." valor={tarifas ? formatCurrency(tarifas.efectiva) : '…'} sub="Realmente cobrado por cara" tono="up" accent={ACCENTS[2]} />
-          <MetricCard titulo="Descuento promedio" valor={tarifas ? `${tarifas.descuentoPct.toFixed(1)}%` : '…'} sub="Pública → efectiva" tono={tarifas && tarifas.descuentoPct > 0 ? 'down' : 'neutral'} accent={ACCENTS[4]} />
+        <div className="grid grid-cols-2 gap-3">
+          <MetricCard titulo="Tarifa promedio por cara" valor={tarifas ? formatCurrency(tarifas.efectiva) : '…'} sub="Precio por cara" tono="neutral" accent={ACCENTS[0]} />
           <MetricCard titulo="Caras (base)" valor={tarifas ? nf(tarifas.caras) : '…'} sub="Caras del alcance" tono="neutral" accent={ACCENTS[3]} />
         </div>
       </div>
@@ -550,9 +574,8 @@ function LeyendaPosNeg() {
   );
 }
 
-// Años seleccionables y helper "Todos" + valores para los dropdowns dinámicos.
+// Años seleccionables.
 const ANIOS = [2026, 2025, 2024];
-const conTodos = (arr: string[]): [string, string][] => [['', 'Todos'], ...arr.map((a) => [a, a] as [string, string])];
 
 // Dropdown de multi-selección con checkboxes (varios meses / catorcenas / semanas).
 function MultiSelect({ label, opciones, sel, onChange }: { label: string; opciones: [number, string][]; sel: number[]; onChange: (s: number[]) => void }) {
