@@ -315,7 +315,7 @@ export function EmbudoPage() {
         <p className="-mt-1 mb-3 text-[11px] text-zinc-400">Promedio por cara según el alcance filtrado</p>
         <div className="grid grid-cols-2 gap-3">
           <MetricCard titulo="Tarifa promedio por cara" valor={tarifas ? formatCurrency(tarifas.efectiva) : '…'} sub="Precio por cara" tono="neutral" accent={ACCENTS[0]} />
-          <MetricCard titulo="Caras (base)" valor={tarifas ? nf(tarifas.caras) : '…'} sub="Caras del alcance" tono="neutral" accent={ACCENTS[3]} />
+          <MetricCard titulo="Total de caras" valor={tarifas ? nf(tarifas.caras) : '…'} sub="Caras del alcance filtrado" tono="neutral" accent={ACCENTS[3]} />
         </div>
       </div>
 
@@ -752,7 +752,7 @@ export function VariacionesPage() {
   const [marcasSel, setMarcasSel] = useState<string[]>([]);       // multi + búsqueda
   const [statusSel, setStatusSel] = useState<string[]>([]);       // estatus (ventas/pase a ventas)
   const [idCampania, setIdCampania] = useState('');               // filtro por ID (texto)
-  const [campoFiltro, setCampoFiltro] = useState<'todos' | 'caras' | 'monto' | 'periodo' | 'eliminacion'>('todos');
+  const [campoFiltro, setCampoFiltro] = useState<'todos' | 'caras' | 'monto' | 'periodo' | 'eliminacion' | 'rechazo'>('todos');
   const [direccion, setDireccion] = useState<'todas' | 'alzas' | 'bajas'>('todas');
   const [verAnalisis, setVerAnalisis] = useState(false);        // desplegable "Ver más análisis"
   const [periodoSel, setPeriodoSel] = useState<number | null>(null); // bucket con click (drill-down)
@@ -868,6 +868,7 @@ export function VariacionesPage() {
     if (campoFiltro === 'monto' && !e.cambioTarifa) return false; // "Tarifa" = cambió la tarifa PÚBLICA (no cualquier inversión)
     if (campoFiltro === 'periodo' && e.tipoEdicion !== 'Cambio de periodo') return false;
     if (campoFiltro === 'eliminacion' && e.tipoEdicion !== 'Eliminar circuito') return false;
+    if (campoFiltro === 'rechazo' && e.tipoEdicion !== 'Rechazo') return false;
     // BASE (CIMU/Trade/UDC) — de solicitud.sap_database. Solo oculta bases CONOCIDAS
     // fuera de la selección (las de base desconocida no se ocultan, para no perder datos).
     if (basesSel.length && e.base && !basesSel.some((b) => b.toUpperCase() === (e.base as string).toUpperCase())) return false;
@@ -876,11 +877,12 @@ export function VariacionesPage() {
     // Posteado (APS): con/sin APS asignado.
     if (apsFiltro === 'con' && !e.tieneAps) return false;
     if (apsFiltro === 'sin' && e.tieneAps) return false;
-    if (plazasSel.length && !(e.plazas ?? []).some((p) => plazasSel.includes(p))) return false;
-    // Tradicional / Digital (e.formatos = solicitudCaras.tipo).
-    if (digitalSel.length && !(e.formatos ?? []).some((f) => digitalSel.some((d) => f.toLowerCase() === d.toLowerCase()))) return false;
-    // Formato (Parabús/Columna/Gran Formato) = buckets sobre el mueble (e.muebles). Substring: "PARABUS" ∈ "RENTA DE ESPACIOS PARABUS".
-    if (muebleSel.length && !(e.muebles ?? []).some((m) => muebleSel.some((k) => m.toUpperCase().includes(k)))) return false;
+    // Plaza/Trad-Digital/Formato: SOLO filtran eventos que SÍ tienen ese atributo. Un
+    // "Cambio de periodo" o un rechazo no editan caras → no traen mueble/formato/plaza;
+    // no deben ocultarse por esos filtros (igual que el de tipo de artículo).
+    if (plazasSel.length && (e.plazas?.length) && !e.plazas.some((p) => plazasSel.includes(p))) return false;
+    if (digitalSel.length && (e.formatos?.length) && !e.formatos.some((f) => digitalSel.some((d) => f.toLowerCase() === d.toLowerCase()))) return false;
+    if (muebleSel.length && (e.muebles?.length) && !e.muebles.some((m) => muebleSel.some((k) => m.toUpperCase().includes(k)))) return false;
     if (clientesSel.length && !(e.cliente && clientesSel.includes(e.cliente))) return false;
     if (campaniasSel.length && !(e.campania && campaniasSel.includes(e.campania))) return false;
     if (marcasSel.length && !(e.marca && marcasSel.includes(e.marca))) return false;
@@ -1090,7 +1092,7 @@ export function VariacionesPage() {
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-zinc-500 dark:text-zinc-400">Movimiento</span>
-            <FiltroGrupo opciones={[['todos', 'Todos'], ['caras', 'Caras'], ['monto', 'Tarifa'], ['periodo', 'Cambio de periodo'], ['eliminacion', 'Eliminación']]} valor={campoFiltro} onSel={(v) => setCampoFiltro(v as typeof campoFiltro)} />
+            <FiltroGrupo opciones={[['todos', 'Todos'], ['caras', 'Caras'], ['monto', 'Tarifa'], ['periodo', 'Cambio de periodo'], ['eliminacion', 'Eliminación'], ['rechazo', 'Rechazadas']]} valor={campoFiltro} onSel={(v) => setCampoFiltro(v as typeof campoFiltro)} />
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-zinc-500 dark:text-zinc-400">Dirección</span>
@@ -1135,12 +1137,14 @@ export function VariacionesPage() {
               {filas.map((e) => {
                 const esPeriodo = e.tipoEdicion === 'Cambio de periodo';
                 const esElim = e.tipoEdicion === 'Eliminar circuito' || e.tipoEdicion === 'Baja de reservas';
+                const esRechazo = e.tipoEdicion === 'Rechazo';
                 const unidadCant = e.unidad === 'impresiones' ? 'Impresiones' : 'Caras';
                 const campos: { label: string; tono: string }[] = [];
                 if (e.cambioCaras) campos.push({ label: unidadCant, tono: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300' });
                 if (e.cambioTarifa) campos.push({ label: 'Tarifa', tono: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' });
                 if (esPeriodo) campos.push({ label: 'Periodo', tono: 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300' });
                 if (esElim) campos.push({ label: 'Eliminación', tono: 'bg-rose-500/15 text-rose-700 dark:text-rose-300' });
+                if (esRechazo) campos.push({ label: 'Rechazo', tono: 'bg-rose-500/15 text-rose-700 dark:text-rose-300' });
                 const art = (e.articulos ?? []).join(', ');
                 const plaza = (e.plazas ?? []).join(', ');
                 const fmt = e.formatoDetalle || (e.muebles ?? []).join(', ') || (e.formatos ?? []).join(', ');
@@ -1167,7 +1171,11 @@ export function VariacionesPage() {
                     </td>
                     {/* Cantidad: caras y/o tarifa pública (ambas si cambiaron juntas) / $ eliminado / periodo. */}
                     <td className="py-1.5 pr-2 text-xs tabular-nums">
-                      {esElim ? (
+                      {esRechazo ? (
+                        <span className="text-rose-600 dark:text-rose-400">
+                          {Math.abs(e.caras) > 0 ? `${Math.abs(e.caras)} caras rechazadas` : 'Campaña rechazada'}
+                        </span>
+                      ) : esElim ? (
                         <span className="text-zinc-600 dark:text-zinc-300">
                           {e.monto != null && e.monto !== 0 ? formatCurrency(Math.abs(e.monto)) : `${Math.abs(e.caras)}`}
                           <span className="mx-1 text-zinc-400">→</span>{e.monto != null && e.monto !== 0 ? '$0' : '0'}
