@@ -98,6 +98,48 @@ function BarraCiclo({ label, dias, max, color }: { label: string; dias: number; 
   );
 }
 
+// Barras VERTICALES (misma data que BarrasDim, pero columnas) — para "monto por asesor".
+function BarrasDimV({ data, color, height }: { data: ConteoMonto[]; color: string; height?: number }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const ink = chartInk(isDark);
+  const rows = data.slice(0, 10).map((d) => ({ ...d, corto: d.nombre.split(' ')[0].slice(0, 12) }));
+  return (
+    <ResponsiveContainer width="100%" height={height ?? 260}>
+      <BarChart data={rows} margin={{ top: 14, right: 8, left: 0, bottom: 4 }}>
+        <CartesianGrid stroke={ink.grid} vertical={false} />
+        <XAxis dataKey="corto" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} interval={0} />
+        <YAxis tickFormatter={(v) => fmtM(Number(v))} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
+        <Tooltip cursor={{ fill: ink.cursor }} content={<TooltipChart format={(v) => formatCurrency(v)} />} />
+        <Bar dataKey="monto" fill={color} radius={[4, 4, 0, 0]} maxBarSize={40}>
+          <LabelList dataKey="monto" position="top" formatter={(v: unknown) => fmtM(Number(v))} fill={ink.label} fontSize={9} />
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+// Barras horizontales de distribución con etiqueta "$ · %" (para formato / tipo de movimiento).
+// `abs` da el largo (todas a la derecha), el color va por el signo del monto neto.
+function BarrasDistPct({ data, height }: { data: { nombre: string; monto: number; abs: number; etq: string }[]; height?: number }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const ink = chartInk(isDark);
+  if (!data.length) return <p className="py-10 text-center text-xs text-zinc-400">Sin datos en el período</p>;
+  return (
+    <ResponsiveContainer width="100%" height={height ?? Math.max(180, data.length * 34)}>
+      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 104, left: 8, bottom: 4 }}>
+        <CartesianGrid stroke={ink.grid} horizontal={false} />
+        <XAxis type="number" tickFormatter={(v) => fmtM(Number(v))} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
+        <YAxis type="category" dataKey="nombre" width={120} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
+        <Tooltip cursor={{ fill: ink.cursor }} content={<TooltipChart format={(v) => formatCurrency(v)} />} />
+        <Bar dataKey="abs" name="Monto" radius={[0, 4, 4, 0]} maxBarSize={20}>
+          {data.map((d, i) => <Cell key={i} fill={d.monto >= 0 ? '#22c55e' : '#f43f5e'} />)}
+          <LabelList dataKey="etq" position="right" fill={ink.label} fontSize={10} />
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 // Barras horizontales (distribución por dimensión)
 function BarrasDim({ data, color, height }: { data: ConteoMonto[]; color: string; height?: number }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
@@ -401,7 +443,7 @@ export function EmbudoPage() {
         <div className={CARD}>
           <CardTitle>Ranking de asesores</CardTitle>
           <p className="-mt-1 mb-2 text-[11px] text-zinc-400">Monto cerrado por asesor</p>
-          <BarrasDim data={asesor} color="#8b5cf6" height={Math.max(200, Math.min(asesor.length, 7) * 34)} />
+          <BarrasDimV data={asesor} color="#8b5cf6" />
         </div>
       </div>
 
@@ -754,7 +796,7 @@ export function VariacionesPage() {
   const [idCampania, setIdCampania] = useState('');               // filtro por ID (texto)
   const [campoFiltro, setCampoFiltro] = useState<'todos' | 'caras' | 'monto' | 'periodo' | 'eliminacion' | 'rechazo'>('todos');
   const [direccion, setDireccion] = useState<'todas' | 'alzas' | 'bajas'>('todas');
-  const [verAnalisis, setVerAnalisis] = useState(false);        // desplegable "Ver más análisis"
+  const [verAnalisis, setVerAnalisis] = useState(true);         // desplegable "Ver más análisis" (abierto por default)
   const [periodoSel, setPeriodoSel] = useState<number | null>(null); // bucket con click (drill-down)
   const [basesSel, setBasesSel] = useState<string[]>(['CIMU', 'TRADE']); // default CIMU+Trade (valores reales de sap_database, en mayúsculas)
   const [tiposArt, setTiposArt] = useState<string[]>(['RT', 'BF', 'IN']); // sin IM = sin impresiones por default
@@ -869,6 +911,9 @@ export function VariacionesPage() {
     if (campoFiltro === 'periodo' && e.tipoEdicion !== 'Cambio de periodo') return false;
     if (campoFiltro === 'eliminacion' && e.tipoEdicion !== 'Eliminar circuito') return false;
     if (campoFiltro === 'rechazo' && e.tipoEdicion !== 'Rechazo') return false;
+    // Las campañas rechazadas/canceladas SOLO se ven en el filtro "Rechazadas";
+    // en las demás vistas se aíslan para no inflar bajas/totales de ediciones.
+    if (campoFiltro !== 'rechazo' && e.tipoEdicion === 'Rechazo') return false;
     // BASE (CIMU/Trade/UDC) — de solicitud.sap_database. Solo oculta bases CONOCIDAS
     // fuera de la selección (las de base desconocida no se ocultan, para no perder datos).
     if (basesSel.length && e.base && !basesSel.some((b) => b.toUpperCase() === (e.base as string).toUpperCase())) return false;
@@ -1009,6 +1054,34 @@ export function VariacionesPage() {
     .map(([nombre, monto]) => ({ nombre, monto }))
     .filter((x) => x.monto !== 0)
     .sort((a, b) => b.monto - a.monto);
+
+  // Distribución en $ y % por FORMATO (mueble: PARABÚS/COLUMNA/…) y por TIPO DE MOVIMIENTO
+  // (Alza/Baja de caras, Tarifa, Cambio de periodo, Eliminación, Rechazo). El % es la
+  // participación sobre el total absoluto; el signo (verde/rojo) dice si sumó o restó inversión.
+  const aDist = (m: Map<string, number>) => {
+    const tot = [...m.values()].reduce((a, v) => a + Math.abs(v), 0) || 1;
+    return [...m.entries()]
+      .map(([nombre, monto]) => {
+        const pct = Math.round((Math.abs(monto) / tot) * 100);
+        return { nombre, monto, abs: Math.abs(monto), etq: `${fmtM(monto)} · ${pct}%` };
+      })
+      .filter((x) => x.monto !== 0)
+      .sort((a, b) => b.abs - a.abs)
+      .slice(0, 8);
+  };
+
+  const porFormato = new Map<string, number>();
+  for (const e of fil) {
+    const ms = e.muebles ?? [];
+    if (!ms.length) continue;
+    const share = (e.monto ?? 0) / ms.length; // reparte el monto entre los muebles tocados
+    for (const m of ms) porFormato.set(m, (porFormato.get(m) ?? 0) + share);
+  }
+  const formatoDist = aDist(porFormato);
+
+  const porTipoMov = new Map<string, number>();
+  for (const e of fil) { const t = e.tipoEdicion ?? 'Otro'; porTipoMov.set(t, (porTipoMov.get(t) ?? 0) + (e.monto ?? 0)); }
+  const tipoMovDist = aDist(porTipoMov);
 
   // Rango de fechas de las ediciones mostradas (para encabezados "variación realizada del … al …").
   const fFilVista = fil.map((e) => new Date(e.fecha).getTime()).filter((t) => Number.isFinite(t));
@@ -1415,6 +1488,30 @@ export function VariacionesPage() {
               </BarChart>
             </ResponsiveContainer>
             {!plazaNeto.length && <p className="py-6 text-center text-xs text-zinc-400">Sin ajustes en el período</p>}
+          </div>
+
+          {/* Distribución por formato (mueble) — $ y % */}
+          <div className={CARD}>
+            <div className="mb-2 flex items-start justify-between gap-2">
+              <div>
+                <CardTitle>Distribución por formato</CardTitle>
+                <p className="-mt-1 text-[11px] text-zinc-400">Participación en $ y % de la variación</p>
+              </div>
+              <LeyendaPosNeg />
+            </div>
+            <BarrasDistPct data={formatoDist} />
+          </div>
+
+          {/* Distribución por tipo de movimiento — $ y % */}
+          <div className={CARD}>
+            <div className="mb-2 flex items-start justify-between gap-2">
+              <div>
+                <CardTitle>Distribución por tipo de movimiento</CardTitle>
+                <p className="-mt-1 text-[11px] text-zinc-400">Participación en $ y % de la variación</p>
+              </div>
+              <LeyendaPosNeg />
+            </div>
+            <BarrasDistPct data={tipoMovDist} />
           </div>
         </div>
       </div>
