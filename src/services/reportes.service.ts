@@ -1,5 +1,5 @@
 import { authFetch } from '../lib/api';
-import type { CampaniaDetalle, Ciclo, CicloTendenciaMes, ConteoMonto, ConteoPeriodo, Dimension, Embudo, FiltrosReporte, OpcionesReporte, Periodo } from '../types/reportes';
+import type { CampaniaDetalle, Ciclo, CicloTendenciaMes, ConteoMonto, ConteoPeriodo, Dimension, Embudo, FiltrosReporte, OpcionesReporte, Periodo, PropuestasAutMes } from '../types/reportes';
 
 async function getJSON<T>(path: string): Promise<T> {
   const res = await authFetch(path);
@@ -53,6 +53,9 @@ export const getCicloTendencia = (f: Partial<FiltrosReporte> = { anio: ANIO_DEF 
   getJSON<CicloTendenciaMes[]>(`/reportes/ciclo-tendencia?${qsFiltros(f)}`);
 export const getCampanias = (limit = 120, f: Partial<FiltrosReporte> = { anio: ANIO_DEF }) =>
   getJSON<CampaniaDetalle[]>(`/reportes/campanias?limit=${limit}&${qsFiltros(f)}`);
+/** Propuestas generadas por mes + % que requieren autorización DG. */
+export const getPropuestasAutorizacion = (f: Partial<FiltrosReporte> = { anio: ANIO_DEF }) =>
+  getJSON<PropuestasAutMes[]>(`/reportes/propuestas-autorizacion?${qsFiltros(f)}`);
 
 /** Valores distintos para los dropdowns de la barra de filtros. */
 export const getOpciones = (anio = ANIO_DEF) => getJSON<OpcionesReporte>(`/reportes/opciones?anio=${anio}`);

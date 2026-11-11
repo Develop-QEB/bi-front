@@ -17,11 +17,11 @@ import { chartInk } from '../../lib/chartTheme';
 import { useThemeStore } from '../../store/themeStore';
 import { getAsesores, getResumenVentas } from '../../services/resumenVentas.service';
 import { getImpacto } from '../../services/historial.service';
-import { getCampanias, getCatorcenas, getCiclo, getCicloTendencia, getDistribucion, getEmbudo, getOpciones, getTarifas, getVentasPeriodo, getVentaTotal } from '../../services/reportes.service';
+import { getCampanias, getCatorcenas, getCiclo, getCicloTendencia, getDistribucion, getEmbudo, getOpciones, getPropuestasAutorizacion, getTarifas, getVentasPeriodo, getVentaTotal } from '../../services/reportes.service';
 import type { CatorcenaCal, Tarifas } from '../../services/reportes.service';
 import { asesorObjetivoDe, objetivoAnual, objetivoDe, useObjetivosStore } from '../../store/objetivosStore';
 import type { ResumenVentas } from '../../types/bi';
-import type { CampaniaDetalle, Ciclo, CicloTendenciaMes, ConteoMonto, Embudo, EtapaEmbudo, FiltrosReporte, Impacto, OpcionesReporte, Periodo } from '../../types/reportes';
+import type { CampaniaDetalle, Ciclo, CicloTendenciaMes, ConteoMonto, Embudo, EtapaEmbudo, FiltrosReporte, Impacto, OpcionesReporte, Periodo, PropuestasAutMes } from '../../types/reportes';
 
 const ANIO = 2026;
 
@@ -192,6 +192,7 @@ export function EmbudoPage() {
   const [filtros, setFiltros] = useState<FiltrosReporte>({ anio: ANIO, mes: null, formato: null, mueble: null, plazas: [], clientes: [], asesores: [], bases: ['CIMU', 'TRADE'], tipos: ['RT', 'BF', 'IN'], muebles: ['PARABUS', 'COLUMNA'], digital: ['Tradicional', 'Digital'] });
   const [opciones, setOpciones] = useState<OpcionesReporte>({ plaza: [], formato: [], mueble: [], cliente: [], asesor: [] });
   const [tendencia, setTendencia] = useState<CicloTendenciaMes[]>([]);
+  const [propAut, setPropAut] = useState<PropuestasAutMes[]>([]);
   const setF = (k: keyof FiltrosReporte, v: string | number | null) =>
     setFiltros((f) => ({ ...f, [k]: v === '' ? null : v }));
   const setArr = (k: 'plazas' | 'clientes' | 'asesores', arr: string[]) => setFiltros((f) => ({ ...f, [k]: arr }));
@@ -213,6 +214,7 @@ export function EmbudoPage() {
       getEmbudo(f).then(setEmb),
       getCiclo(f).then(setCiclo).catch(() => {}),
       getCicloTendencia(f).then(setTendencia).catch(() => setTendencia([])),
+      getPropuestasAutorizacion(f).then(setPropAut).catch(() => setPropAut([])),
       getCampanias(120, f).then(setCamps).catch(() => setCamps([])),
       getDistribucion('plaza', f).then(setPlaza).catch(() => {}),
       getDistribucion('digital', f).then(setDigital).catch(() => {}),
@@ -348,6 +350,44 @@ export function EmbudoPage() {
           </ResponsiveContainer>
         ) : (
           <p className="py-10 text-center text-xs text-zinc-400">Sin datos de ciclo para el alcance filtrado.</p>
+        )}
+      </div>
+
+      {/* Propuestas generadas por mes + % que requieren autorización de la Dirección General */}
+      <div className={CARD}>
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <div>
+            <CardTitle>Propuestas y autorización de Dirección</CardTitle>
+            <p className="-mt-1 text-[11px] text-zinc-400">
+              Propuestas generadas por mes (<span className="text-cyan-500 dark:text-cyan-300">barras</span>) y % que requieren autorización de la Dirección General (<span className="text-amber-500 dark:text-amber-300">línea</span>).
+            </p>
+          </div>
+          {propAut.length > 0 && (() => {
+            const tp = propAut.reduce((a, p) => a + p.propuestas, 0);
+            const td = propAut.reduce((a, p) => a + p.conDG, 0);
+            return (
+              <div className="text-right">
+                <p className="text-lg font-semibold tabular-nums text-purple-700 dark:text-purple-200">{tp ? Math.round((td / tp) * 100) : 0}%</p>
+                <p className="text-[10px] text-zinc-400">{nf(td)} de {nf(tp)} con DG</p>
+              </div>
+            );
+          })()}
+        </div>
+        {propAut.length ? (
+          <ResponsiveContainer width="100%" height={280}>
+            <ComposedChart data={propAut} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke={ink.grid} vertical={false} />
+              <XAxis dataKey="etiqueta" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} />
+              <YAxis yAxisId="prop" tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={36} tickFormatter={(v) => nf(Number(v))} />
+              <YAxis yAxisId="pct" orientation="right" domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fill: ink.axis, fontSize: 10 }} tickLine={false} axisLine={false} width={40} />
+              <Tooltip content={<TooltipChart format={(v, n) => (n === '% requiere DG' ? `${Math.round(v)}%` : `${nf(v)} propuestas`)} />} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Bar yAxisId="prop" dataKey="propuestas" name="Propuestas" fill="#22d3ee" radius={[4, 4, 0, 0]} maxBarSize={30} />
+              <Line yAxisId="pct" type="monotone" dataKey="pctDG" name="% requiere DG" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="py-10 text-center text-xs text-zinc-400">Sin propuestas para el alcance filtrado.</p>
         )}
       </div>
 

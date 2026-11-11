@@ -76,6 +76,15 @@ export interface Ciclo {
   total: number;
 }
 
+/** Propuestas generadas por mes y % que requieren autorización de la Dirección General. */
+export interface PropuestasAutMes {
+  mes: number;
+  etiqueta: string;
+  propuestas: number;
+  conDG: number;
+  pctDG: number;
+}
+
 export interface CampaniaDetalle {
   id: number;
   nombre: string;
