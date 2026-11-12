@@ -334,7 +334,7 @@ export function EmbudoPage() {
       <div className={CARD}>
         <CardTitle>Tendencia del ciclo de vida</CardTitle>
         <p className="-mt-1 mb-2 text-[11px] text-zinc-400">
-          Días promedio por mes de creación · <span className="text-purple-500 dark:text-purple-300">Solicitud → Propuesta</span> (hasta &quot;Atendido&quot;) y <span className="text-emerald-500 dark:text-emerald-300">Propuesta → Aprobación</span> — leído de los cambios de estatus del historial.
+          Días promedio por mes de creación · <span className="text-purple-500 dark:text-purple-300">Solicitud → Propuesta</span> (hasta &quot;Atendido&quot;) y <span className="text-emerald-500 dark:text-emerald-300">Propuesta → Campaña</span> — leído de los cambios de estatus del historial.
         </p>
         {tendencia.some((t) => t.n > 0) ? (
           <ResponsiveContainer width="100%" height={280}>
@@ -345,7 +345,7 @@ export function EmbudoPage() {
               <Tooltip content={<TooltipChart format={(v) => `${Math.round(v * 10) / 10} días`} />} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line type="monotone" dataKey="solProp" name="Solicitud → Propuesta" stroke="#8b5cf6" strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
-              <Line type="monotone" dataKey="propAprob" name="Propuesta → Aprobación" stroke="#22c55e" strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
+              <Line type="monotone" dataKey="propAprob" name="Propuesta → Campaña" stroke="#22c55e" strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
             </ComposedChart>
           </ResponsiveContainer>
         ) : (
